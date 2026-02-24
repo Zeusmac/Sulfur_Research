@@ -1,6 +1,9 @@
 #include <iostream>
 #include "TMath.h"
-double Gaus(double *dim, double *par)
+#include "MultGausTest.h"
+
+
+double Gaus_fit(double *dim, double *par)
 {
   // 5 paremeters used in function: a, x0, sigma, slope, intercept
   double a = par[0];
@@ -199,7 +202,7 @@ void Decayp(TH1 *hist)
   //fitgraph -> SetLogy();
   fitgraph -> Draw("E");
   //legend-> Draw();
-  fitgraph -> SaveAs("Cl47FitBckgrnd.png");
+  fitgraph -> SaveAs("GammaTest.png");
 }
 
 //44S
@@ -489,15 +492,15 @@ void MultGausFit(TH1 *hist, double lower, double upper){
      //for (int i = 0; i < PeakNo; i++) {
 
       TCanvas * fitgraph = new TCanvas("fits");
-      TF1 *F = new TF1("F", Gaus, lower, upper, 5);
+      TF1 *F = new TF1("F", Gaus_fit, lower, upper, 5);
       F->SetParName(0, "a");
       F->SetParName(1, "x0");
       F->SetParName(2, "sigma");
       F->SetParName(3, "slope");
       F->SetParName(4, "intercept");
-      F->SetParLimits(0, 0, 5E6);
+      F->SetParLimits(0, 0, 50000);
       F->SetParLimits(1, lower, upper);
-      F->SetParLimits(4, 0, 5E6);
+      F->SetParLimits(4, 0, 50000);
       //hist->GetListOfFunctions()->Add(F);
       hist->Fit(F, "SR","", lower, upper);
       hist -> Print("V");
