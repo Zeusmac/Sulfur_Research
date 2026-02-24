@@ -227,17 +227,17 @@ void Decay_exp(TH1 *hist)
   decay->SetParameters(40000, 
                       (TMath::Log(2)/125),
                       (TMath::Log(2)/(542)), 
-                      .7 , // ratio
+                      0.185058, // ratio
                       .3, //beta n ratio
                       TMath::Log(2)/(3.13e3), //beta n lam
                       1000, //background source
                       .0001, //lamb
                       86000); // background shift
   decay->SetParLimits(0, 0, 120000); // # source
-  decay->SetParLimits(1, .001, .007); // source lamp
+  decay->SetParLimits(1, TMath::Log(2)/(122.8 + 3), TMath::Log(2)/(122.8 - 3)); // source lamp
   decay->SetParLimits(2, (TMath::Log(2)/(542 + 108)), (TMath::Log(2)/(542 - 108))); // lamd
-  decay->SetParLimits(3, .3, 1); // ratio 
-  decay->SetParLimits(4, .1, 1); //beta n ratio
+  decay->SetParLimits(3, 0.185058, 0.185058); // daughter ratio 
+  decay->SetParLimits(4, 0, 1); //beta n ratio
   decay->SetParLimits(5, (TMath::Log(2)/((3.13 +.09)*1e3)), (TMath::Log(2)/((3.13 -.09)*1e3))); // lam beta n
   decay->SetParLimits(6, 0, 20000); // background source
   decay->SetParLimits(7, 0, .1); // lamb
