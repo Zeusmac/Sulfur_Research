@@ -1,6 +1,6 @@
-#include <iostream>
-#include "TMath.h"
-#include "MultGausTest.h"
+//include <iostream>
+//include "TMath.h"
+//include "MultGausTest.h"
 
 
 double Gaus_fit(double *dim, double *par)
@@ -139,8 +139,8 @@ void Decayp(TH1 *hist)
   double MinX, MaxX;
   MaxX = hist -> GetXaxis() -> GetXmax();
   MinX = hist -> GetXaxis() -> GetXmin();
-  MinX = 1;
-  MaxX = 100;
+  MinX = 600;
+  //MaxX = ;
   TCanvas * fitgraph = new TCanvas("fits");
   fitgraph -> Clear();
   Double_t Parent_halflife = TMath::Log(2)/101;
@@ -149,12 +149,12 @@ void Decayp(TH1 *hist)
   decayp->SetParName(0, "source #     ");
   decayp->SetParName(1, "Source lambda");
   decayp->SetParName(2, "shift        ");
-  decayp->SetParameters(100, 
-                        Parent_halflife,
-                        12);
-  decayp->SetParLimits(0, 0, 450);
+  decayp->SetParameters(90000, 
+                        .004,
+                        40000);
+  decayp->SetParLimits(0, 0, 100000);
   decayp->SetParLimits(1, 0, 1);
-  decayp->SetParLimits(2, 0, 250);
+  decayp->SetParLimits(2, 0, 90000);
 
   for (int i = 0; i < decayp->GetNpar(); i++)
     {
@@ -224,24 +224,24 @@ void Decay_exp(TH1 *hist)
   decay->SetParName(6, "Bckgrnd Source       ");
   decay->SetParName(7, "lamb                 ");
   decay->SetParName(8, "background           ");
-  decay->SetParameters(40000, 
-                      (TMath::Log(2)/125),
-                      (TMath::Log(2)/(542)), 
-                      0.185058, // ratio
-                      .3, //beta n ratio
+  decay->SetParameters(23315.5, 
+                      (TMath::Log(2)/120),
+                      (TMath::Log(2)/(541)), 
+                      0.406675, // ratio
+                      0.0999569, //beta n ratio
                       TMath::Log(2)/(3.13e3), //beta n lam
-                      1000, //background source
-                      .0001, //lamb
+                      18000, //background source
+                      .00001, //lamb
                       86000); // background shift
-  decay->SetParLimits(0, 0, 120000); // # source
-  decay->SetParLimits(1, TMath::Log(2)/(122.8 + 3), TMath::Log(2)/(122.8 - 3)); // source lamp
-  decay->SetParLimits(2, (TMath::Log(2)/(542 + 108)), (TMath::Log(2)/(542 - 108))); // lamd
-  decay->SetParLimits(3, 0.185058, 0.185058); // daughter ratio 
-  decay->SetParLimits(4, 0, 1); //beta n ratio
-  decay->SetParLimits(5, (TMath::Log(2)/((3.13 +.09)*1e3)), (TMath::Log(2)/((3.13 -.09)*1e3))); // lam beta n
-  decay->SetParLimits(6, 0, 20000); // background source
-  decay->SetParLimits(7, 0, .1); // lamb
-  decay->SetParLimits(8, 80000, 140000); //background
+  decay->SetParLimits(0, 0, 30000); // # source
+  decay->SetParLimits(1, TMath::Log(2)/(124.5), TMath::Log(2)/(124.5)); // source lamp
+  decay->SetParLimits(2, (TMath::Log(2)/(542)), (TMath::Log(2)/(542))); // lamd
+  decay->SetParLimits(3, .3, .7); // daughter ratio 
+  decay->SetParLimits(4, .01,.3); //beta n ratio
+  decay->SetParLimits(5, (TMath::Log(2)/((3.13)*1e3)), (TMath::Log(2)/((3.13)*1e3))); // lam beta n
+  decay->SetParLimits(6, 1000, 20000); // background source
+  decay->SetParLimits(7, 1e-6, .004); // lamb
+  decay->SetParLimits(8, 70000, 90000); //background
 
   for (int i = 0; i < decay ->GetNpar(); i++) 
     {
