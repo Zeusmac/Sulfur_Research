@@ -1,18 +1,23 @@
 
 void runAll() {
-    TFile *f = new TFile("e21062_44S.root");
-    //gROOT->ProcessLine("TFile *f = new TFile(\"GammaSpec_44S.root\")");
-    //gROOT->ProcessLine("TFile *f = new TFile(\"Decay_Curve_2789kev.root\")");
+    gROOT -> ProcessLine("TFile* f = new TFile(\"e21062_44S.root\")");
     gROOT->ProcessLine(".L MultGausTest.cxx");
-    TH2D * dtime = (TH2D*) f-> Get("dtime");
+    //TH2D * dt = (TH2D*) f-> Get("dtimeN");
 
 
-    //gROOT->ProcessLine("dtime -> ProjectionX(\"Decay_Curve_2789keV\",2782,2790)");
-    dtime -> ProjectionX("Decay_Curve",20,3500);
-    //gROOT->ProcessLine("dtime -> ProjectionY(\"Gamma_spec_100ms\",1001,1101)");
-   // gROOT->ProcessLine("Decay_exp(Decay_Curve)");
-    gROOT->ProcessLine("Decayp(Decay_Curve)");
-    //gROOT->ProcessLine("MultGausFit(Gamma_spec_100ms,2791,2799)");
+    //dt -> ProjectionX("Decay_Curve",20,3500);
+    gROOT->ProcessLine("dtime -> ProjectionX(\"Decay_curve_329\",326,330)");
+    gROOT->ProcessLine("dtime -> ProjectionX(\"Decay_curve_329_bckgrnd\",321,325)");
+    gROOT ->ProcessLine("Decay_curve_329 -> Add(Decay_curve_329_bckgrnd,-1)");
 
+    //gROOT->ProcessLine("dtime -> ProjectionX(\"Decay_curve_879\",876,880)");
+    //gROOT->ProcessLine("dtime -> ProjectionX(\"Decay_curve_879_bckgrnd\",860,864)");
+
+    gROOT->ProcessLine("Decayp(Decay_curve_329,\"Gammagated_bckgrondSub329_321_325.png\",1)");
     
+    //gROOT ->ProcessLine("Decay_curve_879 -> Add(Decay_curve_879_bckgrnd,-1)");
+
+   // gROOT ->ProcessLine("Decay_curve_879 -> Add(Decay_curve_329)");
+   //gROOT->ProcessLine("Decayp(Decay_curve_879)");
 }
+

@@ -1,4 +1,4 @@
-//include <iostream>
+//nclude <iostream>
 //include "TMath.h"
 //include "MultGausTest.h"
 
@@ -134,12 +134,13 @@ Double_t decay_nbeta(Double_t *dim, Double_t *par)
 
 
 //44SGated
-void Decayp(TH1 *hist)
+void Decayp(TH1* hist, char* filename, int bin)
 {
   double MinX, MaxX;
   MaxX = hist -> GetXaxis() -> GetXmax();
   MinX = hist -> GetXaxis() -> GetXmin();
-  MinX = 600;
+  MinX = 1;
+  hist -> Rebin(bin);
   //MaxX = ;
   TCanvas * fitgraph = new TCanvas("fits");
   fitgraph -> Clear();
@@ -149,12 +150,12 @@ void Decayp(TH1 *hist)
   decayp->SetParName(0, "source #     ");
   decayp->SetParName(1, "Source lambda");
   decayp->SetParName(2, "shift        ");
-  decayp->SetParameters(90000, 
+  decayp->SetParameters(100, 
                         .004,
-                        40000);
-  decayp->SetParLimits(0, 0, 100000);
+                        20);
+  decayp->SetParLimits(0, 0, 800);
   decayp->SetParLimits(1, 0, 1);
-  decayp->SetParLimits(2, 0, 90000);
+  decayp->SetParLimits(2, 0, 800);
 
   for (int i = 0; i < decayp->GetNpar(); i++)
     {
@@ -173,6 +174,8 @@ void Decayp(TH1 *hist)
   }
 
   cout<< "Min X: " << MinX << endl;
+  cout<< "bin :" << bin << "ms" << endl;  
+
   Double_t decayhl = TMath::Log(2)/(decayp ->GetParameter(1));
   Double_t decay_error = (TMath::Log(2)/TMath::Power((decayp -> GetParameter(1)),2))*(decayp -> GetParError(1));
   printf("Decay: %7fms +_ %7fms \n", decayhl, decay_error);
@@ -191,18 +194,20 @@ void Decayp(TH1 *hist)
   legend->AddEntry(decayp,"Fit","l");
   legend->AddEntry(parent,"Parent","l");
 
-  hist -> SetTitle("Decay of 44S Gated on 2789 KeV;Time (ms);Counts");
+  TString title = Form("%s;Time (ms);Counts", filename);	
+  hist -> SetTitle(title);
   hist -> GetXaxis() -> CenterTitle(true);
   hist -> GetYaxis() -> CenterTitle(true);
   hist -> SetLineColor(kBlue);
+  hist->GetXaxis()->SetRangeUser(0.0, 1000);
   hist -> Draw("E");
   decayp -> SetLineColor(kRed); 
   decayp -> Draw("same");
   parent -> Draw("same");
-  //fitgraph -> SetLogy();
+  //fitgraph -> SetLogy(); 
   fitgraph -> Draw("E");
   //legend-> Draw();
-  fitgraph -> SaveAs("GammaTest.png");
+  fitgraph -> SaveAs(filename);
 }
 
 //44S
@@ -213,7 +218,8 @@ void Decay_exp(TH1 *hist)
   MinX = hist -> GetXaxis() -> GetXmin();
   TCanvas * fitgraph = new TCanvas("fits");
   fitgraph -> Clear();
-  MinX = 1;
+  MinX = 0;
+  hist = hist -> Rebin(10);
   TF1 *decay = new TF1("decay", decay_nbeta, MinX, MaxX, 9);
   decay->SetParName(0, "source #             ");
   decay->SetParName(1, "Source lambda        ");
@@ -224,24 +230,24 @@ void Decay_exp(TH1 *hist)
   decay->SetParName(6, "Bckgrnd Source       ");
   decay->SetParName(7, "lamb                 ");
   decay->SetParName(8, "background           ");
-  decay->SetParameters(23315.5, 
-                      (TMath::Log(2)/120),
-                      (TMath::Log(2)/(541)), 
-                      0.406675, // ratio
-                      0.0999569, //beta n ratio
+  decay->SetParameters(287839, 
+                      (TMath::Log(2)/126),
+                      (TMath::Log(2)/(542)), 
+                      0.7, // ratio
+                      0.4, //beta n ratio
                       TMath::Log(2)/(3.13e3), //beta n lam
-                      18000, //background source
-                      .00001, //lamb
-                      86000); // background shift
-  decay->SetParLimits(0, 0, 30000); // # source
-  decay->SetParLimits(1, TMath::Log(2)/(124.5), TMath::Log(2)/(124.5)); // source lamp
+                      300000, //background source
+                      0.0001, //lamb
+                      736663); // background shift
+  decay->SetParLimits(0, 100000, 1500000); // # source
+  decay->SetParLimits(1, TMath::Log(2)/(126.308692 + 3.246710), TMath::Log(2)/(126.308692 - 3.246710)); // source lamp
   decay->SetParLimits(2, (TMath::Log(2)/(542)), (TMath::Log(2)/(542))); // lamd
-  decay->SetParLimits(3, .3, .7); // daughter ratio 
-  decay->SetParLimits(4, .01,.3); //beta n ratio
+  decay->SetParLimits(3, .4, 1); // daughter ratio 
+  decay->SetParLimits(4, .00001,.45); //beta n ratio
   decay->SetParLimits(5, (TMath::Log(2)/((3.13)*1e3)), (TMath::Log(2)/((3.13)*1e3))); // lam beta n
-  decay->SetParLimits(6, 1000, 20000); // background source
-  decay->SetParLimits(7, 1e-6, .004); // lamb
-  decay->SetParLimits(8, 70000, 90000); //background
+  decay->SetParLimits(6, 100000, 500000); // background source
+  decay->SetParLimits(7, .000001, .001); // lamb
+  decay->SetParLimits(8, 40000, 1500000); //background
 
   for (int i = 0; i < decay ->GetNpar(); i++) 
     {
@@ -353,7 +359,7 @@ void Decay_exp(TH1 *hist)
   
   //std::cout << "Chi2_sum: " << chi2_sum/NDF << std::endl;
 
-  auto legend = new TLegend(0.4,0.7,.7,.9);
+  auto legend = new TLegend(0.4,0.1,.7,.3);
   legend->AddEntry(hist,"Data","E");
   legend->AddEntry(decay,"Fit","l");
   legend->AddEntry(parent,"Parent","l");
@@ -363,12 +369,12 @@ void Decay_exp(TH1 *hist)
   legend->AddEntry(bckgrnd,"bckgrnd","l");
 
   parent -> SetLineColor(kOrange);
-  daughter -> SetLineColor(kRed);
+  daughter -> SetLineColor(kRed-2);
   bckgrnd -> SetLineColor(kBlack);
   betan ->  SetLineColor(kGreen);
   hist -> SetLineColor(kBlack);
   decay -> SetLineColor(kRed); 
-  expbckgrnd -> SetLineColor(kYellow);  
+  expbckgrnd -> SetLineColor(kMagenta);  
   // band -> SetFillColorAlpha(kRed, 0.30);
   // decay_chi2_top -> SetLineColor(kRed);
   // decay_chi2_bottom -> SetLineColor(kRed);
@@ -377,7 +383,7 @@ void Decay_exp(TH1 *hist)
   hist -> SetTitle("Decay of 44S Fit;Time (ms);Counts");
   hist -> GetXaxis() -> CenterTitle(true);
   hist -> GetYaxis() -> CenterTitle(true);
-  hist->GetXaxis()->SetRange(1000,2000);
+  //decay->GetXaxis()->SetRange(1000,2000);
   hist -> Draw( "E");
   decay -> Draw("same");
   expbckgrnd -> Draw("same");  
