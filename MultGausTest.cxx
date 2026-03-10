@@ -53,7 +53,7 @@ double decay_parent(double *dim, double *par)
   double bkgrd = par[2];
   double x = dim[0];
 
-  return a * TMath::Exp(-(b) * (x)) + bkgrd;
+  return  a * TMath::Exp(-(b) * (x)) + bkgrd;
 }
 
 Double_t decay_background(Double_t *dim, Double_t *par)
@@ -134,7 +134,7 @@ Double_t decay_nbeta(Double_t *dim, Double_t *par)
 
 
 //44SGated
-void Decayp(TH1* hist, char* filename, int bin)
+void Decayp(TH1* hist,const char* filename, int bin)
 {
   double MinX, MaxX;
   MaxX = hist -> GetXaxis() -> GetXmax();
@@ -153,9 +153,9 @@ void Decayp(TH1* hist, char* filename, int bin)
   decayp->SetParameters(100, 
                         .004,
                         20);
-  decayp->SetParLimits(0, 0, 800);
+  decayp->SetParLimits(0, 0, 4000);
   decayp->SetParLimits(1, 0, 1);
-  decayp->SetParLimits(2, 0, 800);
+  decayp->SetParLimits(2, 0, 4000);
 
   for (int i = 0; i < decayp->GetNpar(); i++)
     {
