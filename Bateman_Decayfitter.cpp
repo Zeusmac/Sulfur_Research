@@ -5,6 +5,8 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include "TFitResult.h"
+#include "TFitResultPtr.h"
 
 #include "TFile.h"
 #include "TH1D.h"
@@ -19,7 +21,7 @@ using namespace std;
 // Time-window normalization
 // ---------------------------
 double Tcorr = 1.0;
-double WindowNorm(double lambda){ return 1.0 / (1.0 - exp(-lambda*Tcorr)); }
+double WindowNorm(double lambda){ return 1.0;}// /(1.0 - exp(-lambda*Tcorr)); }
 
 // ---------------------------
 // Read parameters from file
@@ -39,7 +41,118 @@ void GetPars(vector<string> &names, vector<double> &pars, vector<pair<double,dou
     }
     file.close();
 }
+std::string FormatNumber(double x)
+{
+    std::ostringstream ss;
 
+    double ax = fabs(x);
+
+    if(ax > 1e4 || (ax < 1e-3 && ax > 0))
+        ss<<std::scientific<<std::setprecision(6)<<x;
+    else
+        ss<<std::fixed<<std::setprecision(6)<<x;
+
+    return ss.str();
+}
+
+void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
+{
+
+    std::ofstream file(filename);
+
+    if(!file.is_open())
+    {
+        std::cout<<"Could not open output file\n";
+        return;
+    }
+
+    int npar = fit->GetNpar();
+
+    file<<"\n================ FIT RESULTS ================\n\n";
+
+    file<<"Chi2   = "<<r->Chi2()<<"\n";
+    file<<"NDF    = "<<r->Ndf()<<"\n";
+    file<<"EDM    = "<<r->Edm()<<"\n";
+    file<<"NCalls = "<<r->NCalls()<<"\n";
+
+    file<<"\n---------------------------------------------\n";
+
+    file<<std::left
+        <<std::setw(18)<<"Parameter"
+        <<std::setw(18)<<"Value"
+        <<std::setw(18)<<"Error"
+        <<"Status\n";
+
+    file<<"---------------------------------------------\n";
+
+    for(int i=0;i<npar;i++)
+    {
+
+        const char* name = fit->GetParName(i);
+
+        double val = r->Parameter(i);
+        double err = r->ParError(i);
+
+        bool fixed = r->IsParameterFixed(i);
+
+        file<<std::setw(18)<<name;
+        file<<std::setw(18)<<FormatNumber(val);
+
+        if(fixed)
+            file<<std::setw(18)<<"---";
+        else
+            file<<std::setw(18)<<FormatNumber(err);
+
+        if(fixed)
+            file<<"fixed";
+        else
+            file<<"limited";
+
+        file<<"\n";
+    }
+
+    file<<"---------------------------------------------\n";
+
+    file<<"\nHalf-lives (ms)\n";
+    file<<"---------------------------------------------\n";
+
+    for(int i=0;i<npar;i++)
+    {
+
+        std::string name = fit->GetParName(i);
+
+        if(name.find("lambda") != std::string::npos)
+        {
+
+            double lambda = r->Parameter(i);
+            double err = r->ParError(i);
+
+            double half = log(2.0)/lambda;
+            double half_err = (err/lambda)*half;
+
+            file<<std::setw(18)<<name
+                <<FormatNumber(half)
+                <<" ± "
+                <<FormatNumber(half_err)
+                <<"\n";
+        }
+    }
+
+    file<<"\n---------------------------------------------\n";
+
+    file<<"Chi2/NDF = "
+        <<FormatNumber(r->Chi2())
+        <<" / "
+        <<r->Ndf()
+        <<" = "
+        <<FormatNumber(r->Chi2()/r->Ndf())
+        <<"\n";
+
+    file<<"\n=============================================\n";
+
+    file.close();
+
+}
 // ---------------------------
 // Full Bateman decay model
 // Parameters:
@@ -71,6 +184,10 @@ double TotalModelFull(double *x, double *par){
 
     double Pn            = par[14];
     double P2n           = par[15];
+     
+
+    if(t < 0) return bg;
+   // if(t == 0) return 0;
 
     // physical limits
     if(Pn<0) Pn=0; if(Pn>1) Pn=1;
@@ -132,11 +249,11 @@ double TotalModelFull(double *x, double *par){
 
 // ---------------------------
 int main(int argc,char* argv[]){
-    if(argc<5){ cout<<"Usage: ./bateman_fit <rebin> <rootfile> <histname> <paramfile>\n"; return 1;}
+    if(argc<8){ cout<<"Usage: ./bateman_fit <rebin> <low> <high> <rootfile> <histname> <paramfile> <result filename>\n"; return 1;}
     int rebin = stoi(argv[1]);
-    string filename = argv[2];
-    string histname = argv[3];
-    string paramfile = argv[4];
+    string filename = argv[4];
+    string histname = argv[5];
+    string paramfile = argv[6];
 
     vector<string> names;
     vector<double> pars;
@@ -151,8 +268,8 @@ int main(int argc,char* argv[]){
     h->Rebin(rebin);
 
     Tcorr = h->GetXaxis()->GetXmax();
-    double xmin = 1; //h->GetXaxis()->GetXmin();
-    double xmax = h->GetXaxis()->GetXmax();
+    double xmin = stoi(argv[2]); // h->GetXaxis()->GetXmin();
+    double xmax =stoi(argv[3]);//h->GetXaxis()->GetXmax();
 
     TF1 *fit = new TF1("fit",TotalModelFull,xmin,xmax,npars);
     for(int i=0;i<npars;i++){
@@ -161,7 +278,8 @@ int main(int argc,char* argv[]){
         fit->SetParLimits(i,bounds[i].first,bounds[i].second);
     }
 
-    h->Fit("fit","R");
+    TFitResultPtr result =  h->Fit("fit","SR","",xmin,xmax);
+    PrintFitResults(fit, result, argv[7]);	
 
     cout<<"\nHalf-lives (ms):"<<endl;
     for(int i=0;i<5;i++){ // first 5 parameters are decay constants
@@ -182,6 +300,7 @@ int main(int argc,char* argv[]){
     }
 
     TCanvas *c = new TCanvas("c","Bateman Fit",1200,800);
+    c -> cd();
     h->SetLineColor(kBlack); h->Draw("E");
     fit -> Draw("same");
     //hfit_total->SetLineColor(kOrange+2); hfit_total->Draw("same");
@@ -193,7 +312,7 @@ int main(int argc,char* argv[]){
 
     TFile *fout = new TFile("bateman_fit_output.root","RECREATE");
     h->Write();
-    hfit_total->Write();
+    //hfit_total->Write();
     c -> Write();
     fout->Close();
 

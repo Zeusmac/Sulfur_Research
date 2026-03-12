@@ -53,7 +53,7 @@ double decay_parent(double *dim, double *par)
   double bkgrd = par[2];
   double x = dim[0];
 
-  return  a * TMath::Exp(-(b) * (x)) + bkgrd;
+  return  a * -b *  TMath::Exp(-(b) * (x)) + bkgrd;
 }
 
 Double_t decay_background(Double_t *dim, Double_t *par)
