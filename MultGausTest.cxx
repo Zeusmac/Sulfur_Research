@@ -1,4 +1,4 @@
-//nclude <iostream>
+//include <iostream>
 //include "TMath.h"
 //include "MultGausTest.h"
 

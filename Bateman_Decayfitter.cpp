@@ -41,21 +41,27 @@ void GetPars(vector<string> &names, vector<double> &pars, vector<pair<double,dou
     }
     file.close();
 }
-std::string FormatNumber(double x)
+string FormatNumber(double x)
 {
     std::ostringstream ss;
 
     double ax = fabs(x);
 
     if(ax > 1e4 || (ax < 1e-3 && ax > 0))
-        ss<<std::scientific<<std::setprecision(6)<<x;
+        ss << std::scientific << std::setprecision(6) << x;
     else
-        ss<<std::fixed<<std::setprecision(6)<<x;
+        ss << std::fixed << std::setprecision(6) << x;
 
     return ss.str();
 }
 
-void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
+
+void PrintFitResults(TH1* hist,
+                       TF1* fit,
+                       TFitResultPtr r,
+                       const double* initial_pars,
+                       double ms_per_bin,
+                       const char* filename)
 {
 
     std::ofstream file(filename);
@@ -68,22 +74,44 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
 
     int npar = fit->GetNpar();
 
-    file<<"\n================ FIT RESULTS ================\n\n";
+    double xmin = fit->GetXmin();
+    double xmax = fit->GetXmax();
 
-    file<<"Chi2   = "<<r->Chi2()<<"\n";
+    file<<"\n================ FIT REPORT ================\n\n";
+
+    file<<"Histogram           : "<<hist->GetName()<<"\n";
+    file<<"Fit Function        : "<<fit->GetName()<<"\n";
+
+    file<<"\nFit Range\n";
+    file<<"-------------------------------------------\n";
+    file<<"xmin = "<<FormatNumber(xmin)<<"\n";
+    file<<"xmax = "<<FormatNumber(xmax)<<"\n";
+
+    file<<"\nBin Width\n";
+    file<<"-------------------------------------------\n";
+    file<<"ms per bin = "<<FormatNumber(ms_per_bin)<<"\n";
+
+    file<<"\nFit Statistics\n";
+    file<<"-------------------------------------------\n";
+
+    file<<"Chi2   = "<<FormatNumber(r->Chi2())<<"\n";
     file<<"NDF    = "<<r->Ndf()<<"\n";
-    file<<"EDM    = "<<r->Edm()<<"\n";
+    file<<"EDM    = "<<FormatNumber(r->Edm())<<"\n";
     file<<"NCalls = "<<r->NCalls()<<"\n";
 
-    file<<"\n---------------------------------------------\n";
+    file<<"\nParameter Table\n";
+    file<<"----------------------------------------------------------------------------------\n";
 
     file<<std::left
         <<std::setw(18)<<"Parameter"
-        <<std::setw(18)<<"Value"
-        <<std::setw(18)<<"Error"
+        <<std::setw(16)<<"Initial"
+        <<std::setw(16)<<"Value"
+        <<std::setw(16)<<"Error"
+        <<std::setw(16)<<"LowerBound"
+        <<std::setw(16)<<"UpperBound"
         <<"Status\n";
 
-    file<<"---------------------------------------------\n";
+    file<<"----------------------------------------------------------------------------------\n";
 
     for(int i=0;i<npar;i++)
     {
@@ -93,15 +121,22 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
         double val = r->Parameter(i);
         double err = r->ParError(i);
 
+        double lo,hi;
+        fit->GetParLimits(i,lo,hi);
+
         bool fixed = r->IsParameterFixed(i);
 
         file<<std::setw(18)<<name;
-        file<<std::setw(18)<<FormatNumber(val);
+        file<<std::setw(16)<<FormatNumber(initial_pars[i]);
+        file<<std::setw(16)<<FormatNumber(val);
 
         if(fixed)
-            file<<std::setw(18)<<"---";
+            file<<std::setw(16)<<"---";
         else
-            file<<std::setw(18)<<FormatNumber(err);
+            file<<std::setw(16)<<FormatNumber(err);
+
+        file<<std::setw(16)<<FormatNumber(lo);
+        file<<std::setw(16)<<FormatNumber(hi);
 
         if(fixed)
             file<<"fixed";
@@ -111,10 +146,10 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
         file<<"\n";
     }
 
-    file<<"---------------------------------------------\n";
+    file<<"----------------------------------------------------------------------------------\n";
 
     file<<"\nHalf-lives (ms)\n";
-    file<<"---------------------------------------------\n";
+    file<<"-------------------------------------------\n";
 
     for(int i=0;i<npar;i++)
     {
@@ -128,7 +163,10 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
             double err = r->ParError(i);
 
             double half = log(2.0)/lambda;
-            double half_err = (err/lambda)*half;
+
+            double half_err = 0;
+            if(lambda != 0)
+                half_err = (err/lambda)*half;
 
             file<<std::setw(18)<<name
                 <<FormatNumber(half)
@@ -138,7 +176,7 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
         }
     }
 
-    file<<"\n---------------------------------------------\n";
+    file<<"\n-------------------------------------------\n";
 
     file<<"Chi2/NDF = "
         <<FormatNumber(r->Chi2())
@@ -148,11 +186,10 @@ void PrintFitResults(TF1* fit, TFitResultPtr r, const char* filename)
         <<FormatNumber(r->Chi2()/r->Ndf())
         <<"\n";
 
-    file<<"\n=============================================\n";
+    file<<"\n===========================================\n";
 
     file.close();
-
-}
+    }
 // ---------------------------
 // Full Bateman decay model
 // Parameters:
@@ -279,7 +316,10 @@ int main(int argc,char* argv[]){
     }
 
     TFitResultPtr result =  h->Fit("fit","SR","",xmin,xmax);
-    PrintFitResults(fit, result, argv[7]);	
+    double init[16];
+    for(int i=0;i<fit->GetNpar();i++)
+	    init[i] = fit->GetParameter(i);
+    PrintFitResults(h, fit, result, init, rebin, argv[7]);	
 
     cout<<"\nHalf-lives (ms):"<<endl;
     for(int i=0;i<5;i++){ // first 5 parameters are decay constants
