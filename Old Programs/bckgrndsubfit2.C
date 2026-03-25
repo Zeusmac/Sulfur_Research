@@ -129,13 +129,6 @@ void bckgrndsubfit2()
     parent->SetParName(3,"lambda_b");
     parent->SetParName(4,"Background");
 
-    parent->SetParameters(1000,0.001,1000,.0001, 200);
-    parent->SetParLimits(0,0,13000);
-    parent->SetParLimits(1,.00001,.006);
-    parent->SetParLimits(2,0,10000);
-    parent->SetParLimits(3,.00001,1);
-    parent->SetParLimits(4,0,20000);
-
     gamma->Fit(parent,"SR","",Xmin,Xmax);
 
     TF1 *parentsub = new TF1("parentsub", decay_model, Xmin, Xmax, 5);

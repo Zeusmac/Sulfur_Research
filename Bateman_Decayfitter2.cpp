@@ -72,6 +72,7 @@ void DrawFitStatsBox(TCanvas* c,TF1* fit, double xmin, double xmax){
 double TotalModelFull(double *x, double *par){
     double t = x[0];
     if(t<0) return par[7]; // background
+    if(t==-1) return inf;	
 
     double lambda_p      = par[0];
     double lambda_d      = par[1];
@@ -184,58 +185,58 @@ int main(int argc,char* argv[]){
     for(int i=0;i<fit->GetNpar();i++)
 	    init[i] = fit->GetParameter(i);
 
-TCanvas *c = new TCanvas("c","Bateman Fit",1200,800);
-c->cd();
+	TCanvas *c = new TCanvas("c","Bateman Fit",1200,800);
+	c->cd();
 
-h->SetTitle("Bateman Fit;Time (ms);Counts");
-h->Draw("E");
+	h->SetTitle("Bateman Fit;Time (ms);Counts");
+	h->Draw("E");
 
-// total fit
-fit->SetLineColor(kRed);
-fit->Draw("same");
+	// total fit
+	fit->SetLineColor(kRed);
+	fit->Draw("same");
 
-// -------- Parent component --------
-TF1* f_parent = new TF1("parent","[0]*exp(-[1]*x)",xmin,xmax);
-f_parent->SetParameters(N0*eff_p*lambda_p,lambda_p);
-f_parent->SetLineColor(kBlue);
-f_parent->SetLineStyle(2);
-f_parent->Draw("same");
+	// -------- Parent component --------
+	TF1* f_parent = new TF1("parent","[0]*exp(-[1]*x)",xmin,xmax);
+	f_parent->SetParameters(N0*eff_p*lambda_p,lambda_p);
+	f_parent->SetLineColor(kBlue);
+	f_parent->SetLineStyle(2);
+	f_parent->Draw("same");
 
-// -------- Daughter component --------
-TF1* f_daughter = new TF1("daughter",
-"[0]*(exp(-[1]*x)-exp(-[2]*x)) + [3]",
-xmin,xmax);
+	// -------- Daughter component --------
+	TF1* f_daughter = new TF1("daughter",
+	"[0]*(exp(-[1]*x)-exp(-[2]*x)) + [3]",
+	xmin,xmax);
 
-f_daughter->SetParameters(scale_d,lambda_p,lambda_d,bg);
-f_daughter->SetLineColor(kGreen+2);
-f_daughter->SetLineStyle(2);
-f_daughter->Draw("same");
+	f_daughter->SetParameters(scale_d,lambda_p,lambda_d,bg);
+	f_daughter->SetLineColor(kGreen+2);
+	f_daughter->SetLineStyle(2);
+	f_daughter->Draw("same");
 
-// -------- Background --------
-TF1* f_bg = new TF1("bg","[0]",xmin,xmax);
-f_bg->SetParameter(0,bg);
-f_bg->SetLineColor(kMagenta);
-f_bg->SetLineStyle(3);
-f_bg->Draw("same");
+	// -------- Background --------
+	TF1* f_bg = new TF1("bg","[0]",xmin,xmax);
+	f_bg->SetParameter(0,bg);
+	f_bg->SetLineColor(kMagenta);
+	f_bg->SetLineStyle(3);
+	f_bg->Draw("same");
 
 
-// legend
-TLegend *leg = new TLegend(0.15,0.15,0.35,0.35);
-leg->SetBorderSize(0);
-leg->SetFillStyle(0);
+	// legend
+	TLegend *leg = new TLegend(0.15,0.15,0.35,0.35);
+	leg->SetBorderSize(0);
+	leg->SetFillStyle(0);
 
-leg->AddEntry(h,"Data","lep");
-leg->AddEntry(fit,"Total Fit","l");
-leg->AddEntry(f_parent,"Parent","l");
-leg->AddEntry(f_daughter,"Daughter","l");
-leg->AddEntry(f_bg,"Background","l");
+	leg->AddEntry(h,"Data","lep");
+	leg->AddEntry(fit,"Total Fit","l");
+	leg->AddEntry(f_parent,"Parent","l");
+	leg->AddEntry(f_daughter,"Daughter","l");
+	leg->AddEntry(f_bg,"Background","l");
 
-leg->Draw();
+	leg->Draw();
 
-// stats box
-DrawFitStatsBox(c,fit,xmin,xmax);
+	// stats box
+	DrawFitStatsBox(c,fit,xmin,xmax);
 
-c->Update();   // IMPORTANT
+	c->Update();   // IMPORTANT
     c->SaveAs("bateman_fit.png");
 
     TFile *fout = new TFile("bateman_fit_output.root","RECREATE");
