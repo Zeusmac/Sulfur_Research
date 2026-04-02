@@ -5,22 +5,17 @@
 #include <fstream>
 #include <vector>
 #include <string>
-
-#include "TApplication.h"
 #include "TFitResult.h"
 #include "TFitResultPtr.h"
+
 #include "TFile.h"
 #include "TH1D.h"
 #include "TF1.h"
 #include "TCanvas.h"
 #include "TLegend.h"
-#include "TPaveText.h"
 #include "TMath.h"
-#include "TGraph.h"
-#include "TMultiGraph.h"
-#include "TGraphErrors.h"
+#include "TApplication.h"
 using namespace std;
-
 //////////////////////////////////////////////////////////////
 // Utility
 //////////////////////////////////////////////////////////////
@@ -66,9 +61,6 @@ bool GetPars(FitConfig &cfg, const string &filename)
         else if(key=="HIST") file >> cfg.histname;
         else if(key=="RANGE") file >> cfg.xmin >> cfg.xmax;
         else if(key=="REBIN") file >> cfg.rebin;
-	else if(key=="USE_BETA") file >> cfg.use_beta;
-	else if(key=="USE_BN")   file >> cfg.use_bn;
-	else if(key=="USE_2N")   file >> cfg.use_2n;
         else if(key=="OUTPUT") file >> cfg.outfile;
 
         else if(key[0]=='#'){
@@ -246,180 +238,53 @@ void PrintFitResultsAppend(TF1* fit, TFitResultPtr r, ofstream &file,
 
     file << "\n============================================================\n";
 }
-void DrawContoursAdvanced(TFitResultPtr result, const string& outroot="contours.root") {
-    TFile* fout = new TFile(outroot.c_str(), "RECREATE");
 
-    int npar = result->NPar();  // <-- correct
-    for (int i = 0; i < npar; ++i) {
-        for (int j = i+1; j < npar; ++j) {
-            unsigned int npoints = 1000;
-            vector<double> x(npoints), y(npoints);
-  	    if(result->IsParameterFixed(i) || result->IsParameterFixed(j)) continue;
-	    if(!result->CovMatrixStatus()){
- 	    std::cout << "Covariance matrix not valid, contours cannot be computed." << std::endl;
-   	    return;
-	    }
-            bool ok = result->Contour(i, j, npoints, x.data(), y.data(), 0.683);
-            if (!ok){    std::cout << "Contour failed for pair " 
-              << result->GetParameterName(i) << " vs " 
-              << result->GetParameterName(j) << std::endl;
-    		continue;
-		};
-
-            TGraph* gr = new TGraph(npoints, x.data(), y.data());
-            gr->SetTitle(Form("Contour %s vs %s; %s; %s",
-                              result->GetParameterName(i).c_str(),
-                              result->GetParameterName(j).c_str(),
-                              result->GetParameterName(i).c_str(),
-                              result->GetParameterName(j).c_str()));
-            gr->SetLineColor(kRed);
-            gr->SetLineWidth(2);
-            gr->Write(Form("Contour_%s_vs_%s", 
-                           result->GetParameterName(i).c_str(),
-                           result->GetParameterName(j).c_str()));
-        }
-    }
-
-    fout->Close();
-    cout << "All contours saved to " << outroot << endl;
-}
-FitConfig *gCfg = nullptr;
-//////////////////////////////////////////////////////////////
-// ORIGINAL FULL BATEMAN MODEL
-//////////////////////////////////////////////////////////////
-
-Double_t TotalModelFull(double *x, double *par)
-{
+// ---------------------------
+// Full Bateman decay model
+// Parameters:
+// 0-4: lambda_p, lambda_d, lambda_bn, lambda_gd, lambda_2n_d
+// 5: lambda_bn_gd (new for beta-n granddaughter)
+// 6: N0
+// 7: bg
+// 8-13: efficiencies eff_p, eff_d, eff_bn, eff_gd, eff_2n_d, eff_bn_gd
+// 14-15: branching ratios Pn, P2n
+// ---------------------------
+double TotalModelFull(double *x, double *par){
     double t = x[0];
-    if(t < 0) return par[7];
-   // if(t > 4000) return par[7];
-    // ---------------- CHANNEL SWITCHES ----------------
-    int use_beta = gCfg->use_beta;
-    int use_bn   = gCfg->use_bn;
-    int use_2n   = gCfg->use_2n;
-    // ---------------- PARAMETERS ----------------
+
     double lambda_p      = par[0];
     double lambda_d      = par[1];
     double lambda_bn     = par[2];
-    double lambda_gd     = par[3];
-    double lambda_2n_d   = par[4];
-    double lambda_bn_gd  = par[5];
-    double N0            = par[6];
-    double bg            = par[7];
+    double lambda_b   	 = par[3]; 
+    double Nb		 = par[4];
+    double N0            = par[5];
 
-    double eff_p         = par[8];
-    double eff_d         = par[9];
-    double eff_bn        = par[10];
-    double eff_gd        = par[11];
-    double eff_2n_d      = par[12];
-    double eff_bn_gd     = par[13];
-
-    double Pn            = par[14];
-    double P2n           = par[15];
+    double eff_d         = par[7] + par[6]*par[6];
+    double eff_bn        = par[7];
 
 
-    // ---------------- SAFETY ----------------
-    if(Pn < 0) Pn = 0; if(Pn > 1) Pn = 1;
-    if(P2n < 0) P2n = 0; if(P2n > 1) P2n = 1;
 
-    double raw_beta = 1.0 - Pn - P2n;
-    if(raw_beta < 0) raw_beta = 0;
+    if(t < 0) return bg;
 
-    // ---------------- NORMALIZATION ----------------
-    double total_branch = 0;
+    // physical limits
+    double rate = 0.0;
 
-    if(use_beta) total_branch += raw_beta;
-    if(use_bn)   total_branch += Pn;
-    if(use_2n)   total_branch += P2n;
-
-    if(total_branch <= 0) return 1e30;
-
-    double branch_d = 1;//use_beta ? raw_beta / total_branch : 0;
-    double branch_bn = 1;//use_bn ? Pn / total_branch : 0;
-    double branch_2n = use_2n ? P2n / total_branch : 0;
-
-    Double_t rate = 0.0;
-
-    // ---------------- PARENT ----------------
+    // -------- Parent --------
     double Np = N0 * exp(-lambda_p*t);
-    rate += eff_p * lambda_p * Np;
+    rate +=  Np;
 
-    // ---------------- DAUGHTER ----------------
-    if(use_beta){
-        double denom = (lambda_d - lambda_p);
-        if(fabs(denom) < 1e-12) denom = 1e-12;
+    // -------- Daughter --------
+    double Nd = N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
+    rate +=  eff_d * lambda_d * Nd;
 
-        double Nd = branch_d * N0 * (lambda_p/denom) *
-                    (exp(-lambda_p*t)-exp(-lambda_d*t));
+    // -------- Beta-n daughter --------
+    double Nbn =  N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
+    rate += eff_bn * lambda_bn * Nbn;
 
-        rate += eff_d * lambda_d * Nd;
-    }
-
-    // ---------------- BETA-n ----------------
-    if(use_bn){
-        double denom = (lambda_bn - lambda_p);
-        if(fabs(denom) < 1e-12) denom = 1e-12;
-
-        double Nbn = branch_bn * N0 * (lambda_p/denom) *
-                     (exp(-lambda_p*t)-exp(-lambda_bn*t));
-
-        rate += eff_bn * lambda_bn * Nbn;
-    }
-    // ---------------- BETA-n GRANDDAUGHTER ----------------
-	if(use_bn){
-	    double l1 = lambda_p;
-	    double l2 = lambda_bn;
-	    double l3 = lambda_bn_gd;
-
-	    // Protect denominators
-	    double d12 = (l2 - l1); if(fabs(d12) < 1e-12) d12 = 1e-12;
-	    double d13 = (l3 - l1); if(fabs(d13) < 1e-12) d13 = 1e-12;
-	    double d23 = (l3 - l2); if(fabs(d23) < 1e-12) d23 = 1e-12;
-
-	    double term1 = exp(-l1*t) / (d12 * d13);
-	    double term2 = exp(-l2*t) / ((-d12) * d23);
-	    double term3 = exp(-l3*t) / ((-d13) * (-d23));
-
-	    double N_bn_gd = branch_bn * N0 * l1 * l2 * (term1 + term2 + term3);
-
-	    rate += eff_bn_gd * l3 * N_bn_gd;
-	}
-// ---------------- BETA GRANDDAUGHTER ----------------
-	if(use_beta){
-	    double l1 = lambda_p;
-	    double l2 = lambda_d;
-	    double l3 = lambda_gd;
-
-	    // Protect denominators
-	    double d12 = (l2 - l1); if(fabs(d12) < 1e-12) d12 = 1e-12;
-	    double d13 = (l3 - l1); if(fabs(d13) < 1e-12) d13 = 1e-12;
-	    double d23 = (l3 - l2); if(fabs(d23) < 1e-12) d23 = 1e-12;
-
-	    double term1 = exp(-l1*t) / (d12 * d13);
-	    double term2 = exp(-l2*t) / ((-d12) * d23);
-	    double term3 = exp(-l3*t) / ((-d13) * (-d23));
-
-	    double Ngd = branch_d * N0 * l1 * l2 * (term1 + term2 + term3);
-
-	    rate += eff_gd * l3 * Ngd;
-	    }
-    // ---------------- BETA-2n ----------------
-    if(use_2n){
-        double denom = (lambda_2n_d - lambda_p);
-        if(fabs(denom) < 1e-12) denom = 1e-12;
-
-        double N2n = branch_2n * N0 * (lambda_p/denom) *
-                     (exp(-lambda_p*t)-exp(-lambda_2n_d*t));
-
-        rate += eff_2n_d * lambda_2n_d * N2n;
-    }
-
-    // ---------------- BACKGROUND ----------------
-    rate += bg;
-
-    // ---------------- SAFETY: prevent negative ----------------
-    if(rate < 0) return 1e30;
-
+   // --------- expo bckgrnd----------
+    double Nbg = Nb * exp(-lambda_b*t);
+    rate += Nbg;
+    
     return rate;
 }
 // ---------------------------
@@ -428,99 +293,46 @@ Double_t TotalModelFull(double *x, double *par)
 double ParentComponent(double *x, double *par){
     double t = x[0];
     double lambda_p = par[0];
-    double N0       = par[6];
-    double eff_p    = par[8];
-    double bg       = par[7];
+    double N0       = par[5];
+    double bg       = par[6];
     double Np = N0*exp(-lambda_p*t);
-    return eff_p*lambda_p*Np + bg;
+    return lambda_p*Np;
 }
 
 double DaughterComponent(double *x, double *par){
     double t = x[0];
     double lambda_p = par[0];
     double lambda_d = par[1];
-    double N0       = par[6];
-    double eff_d    = par[9];
-    double Pn      = par[14];
-    double P2n     = par[15];
-    double branch_d = 1.0 - Pn - P2n;
-    if(branch_d<0) branch_d=0;
-    double Nd = branch_d * N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
-    return eff_d*lambda_d*Nd + par[7];
+    double N0       = par[5];
+    double eff_d    = par[8] + par[7]*par[7];
+    double bg = par[6];
+    double Nd =  N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
+    return eff_d*lambda_d*Nd;
 }
 
 // Similarly define for other components: Granddaughter, Beta-n daughter, Beta-n granddaughter, Beta-2n daughter
-// For brevity, I’ll do Granddaughter:
-double GranddaughterComponent(double *x, double *par){
-    double t = x[0];
-    double lambda_p = par[0];
-    double lambda_d = par[1];
-    double lambda_gd = par[3];
-    double N0       = par[6];
-    double eff_gd   = par[11];
-    double Pn      = par[14];
-    double P2n     = par[15];
-    double branch_d = 1.0 - Pn - P2n;
-    if(branch_d<0) branch_d=0;
-
-    double denom1 = (lambda_d-lambda_p)*(lambda_gd-lambda_p);
-    double denom2 = (lambda_p-lambda_d)*(lambda_gd-lambda_d);
-    double denom3 = (lambda_p-lambda_gd)*(lambda_d-lambda_gd);
-    if(fabs(denom1)<1e-20) denom1=1e-20;
-    if(fabs(denom2)<1e-20) denom2=1e-20;
-    if(fabs(denom3)<1e-20) denom3=1e-20;
-
-    double Ngd = branch_d * N0 * lambda_p * lambda_d * (
-        exp(-lambda_p*t)/denom1 +
-        exp(-lambda_d*t)/denom2 +
-        exp(-lambda_gd*t)/denom3
-    );
-    return eff_gd*lambda_gd*Ngd + par[7];
-}
 // Beta-n daughter + background
 double BetaNDaughterComponent(double *x, double *par){
     double t = x[0];
     double lambda_p   = par[0];
     double lambda_bn  = par[2];
-    double N0         = par[6];
-    double eff_bn     = par[10];
-    double Pn         = par[14];
-    double bg         = par[7];
+    double N0         = par[5];
+    double eff_bn     = par[8];
+    double bg         = par[6];
 
-    double Nbn = Pn * N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
-    return eff_bn * lambda_bn * Nbn + bg;
+    double Nbn =  N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
+    return eff_bn * lambda_bn * Nbn;
 }
 
-// Beta-n granddaughter + background
-double BetaNGranddaughterComponent(double *x, double *par){
+double Expobg(double *x, double *par){
     double t = x[0];
-    double lambda_p      = par[0];
-    double lambda_bn     = par[2];
-    double lambda_bn_gd  = par[5];
-    double N0            = par[6];
-    double eff_bn_gd     = par[13];
-    double Pn            = par[14];
-    double bg            = par[7];
-
-    double denom1 = (lambda_bn-lambda_p)*(lambda_bn_gd-lambda_p);
-    double denom2 = (lambda_p-lambda_bn)*(lambda_bn_gd-lambda_bn);
-    double denom3 = (lambda_p-lambda_bn_gd)*(lambda_bn-lambda_bn_gd);
-    if(fabs(denom1)<1e-20) denom1=1e-20;
-    if(fabs(denom2)<1e-20) denom2=1e-20;
-    if(fabs(denom3)<1e-20) denom3=1e-20;
-
-    double Nbgd = Pn * N0 * lambda_p * lambda_bn * (
-        exp(-lambda_p*t)/denom1 +
-        exp(-lambda_bn*t)/denom2 +
-        exp(-lambda_bn_gd*t)/denom3
-    );
-    return eff_bn_gd * lambda_bn_gd * Nbgd + bg;
+    double lambda_b = par[3];
+    double Nb       = par[4];
+    double bg       = par[6];
+    double Nbg = Nb*exp(-lambda_b*t);
+    return Nbg;
 }
-
-//////////////////////////////////////////////////////////////
-// MAIN
-//////////////////////////////////////////////////////////////
-
+// ---------------------------
 int main(int argc,char* argv[])
 {
 	if(argc < 3){
@@ -528,7 +340,6 @@ int main(int argc,char* argv[])
 		return 1;
 	}
 	FitConfig cfg;
-	gCfg = &cfg;
 	if(!GetPars(cfg, argv[1])) return 1;
         TApplication app("app", &argc, argv);
 	TFile *f = TFile::Open(cfg.filename.c_str());
@@ -544,7 +355,7 @@ int main(int argc,char* argv[])
 		fit->SetParLimits(i,cfg.bounds[i].first,cfg.bounds[i].second);
 	}
 
-	TFitResultPtr result = h->Fit("fit","S R M E","",cfg.xmin,cfg.xmax);
+	TFitResultPtr result = h->Fit("fit","S R E","",cfg.xmin,cfg.xmax);
  	result -> Print("V");
 	// Save results
 	ofstream out(cfg.outfile);
@@ -564,55 +375,51 @@ int main(int argc,char* argv[])
 			}
 		}
 	}
-	DrawContoursAdvanced(result, "bateman_fit_contours.root");
 	TCanvas *c = new TCanvas("c","Fit",800,600);
 	    // Draw individual components
 	TF1* f_parent = new TF1("Parent", ParentComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_daughter = new TF1("Daughter", DaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_granddaughter = new TF1("Granddaughter", GranddaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_bn_granddaughter = new TF1("BetaN_Granddaughter", BetaNGranddaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
+	TF1* f_expbg = new TF1("expbg", Expobg, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_bck = new TF1("f_bck", "[0]", cfg.xmin, cfg.xmax);
 	
 	// Copy parameters from fit
 	for(int i=0;i<fit->GetNpar();i++){
 	    f_parent->SetParameter(i, fit->GetParameter(i));
 	    f_daughter->SetParameter(i, fit->GetParameter(i));
-	    f_granddaughter->SetParameter(i, fit->GetParameter(i));
 	    f_bn_daughter->SetParameter(i, fit->GetParameter(i));
-            f_bn_granddaughter->SetParameter(i, fit->GetParameter(i));
+	    f_expbg->SetParameter(i, fit->GetParameter(i));
 	}
-	f_bck -> SetParameter(0,fit -> GetParameter(7));
+	f_bck -> SetParameter(0,fit -> GetParameter(6));
 	// Set line colors
 	f_parent->SetLineColor(kOrange);
-	f_daughter->SetLineColor(kYellow + 2);
-	f_granddaughter->SetLineColor(kBlack);
+	f_daughter->SetLineColor(kYellow + 1);
+	f_expbg->SetLineColor(kGreen);
 	f_bn_daughter->SetLineColor(kBlue - 4);
-	f_bn_granddaughter->SetLineColor(kGreen - 4);
-
+	f_bck -> SetLineColor(kRed);
 	// Draw everything
 	h->Draw("E");
 	fit->Draw("same");               // total fit
 	f_parent->Draw("same");          // parent
 	f_daughter->Draw("same");        // daughter
-	f_granddaughter->Draw("same");   // granddaughter
+	f_expbg->Draw("same");   // granddaughter
 	f_bn_daughter->Draw("same");           // beta-n daughter
 	f_bck ->Draw("same");      // background
 	// Legend
 	TLegend* leg = new TLegend(0.6,0.6,0.9,0.9);
 	leg->AddEntry(h,"Data","lep");
 	leg->AddEntry(fit,"Total Fit","l");
-	leg->AddEntry(f_parent,"Parent + bg","l");
-	leg->AddEntry(f_daughter,"Daughter + bg","l");
-	leg->AddEntry(f_granddaughter,"Granddaughter + bg","l");
-	leg->AddEntry(f_bn_daughter,"Beta-n Daughter + bg","l");
+	leg->AddEntry(f_parent,"Parent","l");
+	leg->AddEntry(f_daughter,"Daughter","l");
+	leg->AddEntry(f_expbg,"Expo Backgrnd","l");
+	leg->AddEntry(f_bn_daughter,"Beta-n Daughter","l");
 	leg->AddEntry(f_bck,"Bck","l");
 	leg->Draw();
-
-	c->SaveAs(argv[2]);
+	string output = argv[2];
+	c->SaveAs(output.c_str());
 	c -> Update();
 	app.Run();
-	
+	cout << "eff_d: "<< (fit-> GetParameter(8) + (fit->GetParameter(7))*(fit -> GetParameter(7))) << endl;
 	cout<<"Done. Results saved.\n";
 
 	return 0;

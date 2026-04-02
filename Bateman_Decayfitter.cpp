@@ -283,7 +283,100 @@ double TotalModelFull(double *x, double *par){
 
     return rate;
 }
+// ---------------------------
+// Component functions with background
+// ---------------------------
+double ParentComponent(double *x, double *par){
+    double t = x[0];
+    double lambda_p = par[0];
+    double N0       = par[6];
+    double eff_p    = par[8];
+    double bg       = par[7];
+    double Np = N0*exp(-lambda_p*t);
+    return eff_p*lambda_p*Np + bg;
+}
 
+double DaughterComponent(double *x, double *par){
+    double t = x[0];
+    double lambda_p = par[0];
+    double lambda_d = par[1];
+    double N0       = par[6];
+    double eff_d    = par[9];
+    double Pn      = par[14];
+    double P2n     = par[15];
+    double branch_d = 1.0 - Pn - P2n;
+    if(branch_d<0) branch_d=0;
+    double Nd = branch_d * N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
+    return eff_d*lambda_d*Nd + par[7];
+}
+
+// Similarly define for other components: Granddaughter, Beta-n daughter, Beta-n granddaughter, Beta-2n daughter
+// For brevity, I’ll do Granddaughter:
+double GranddaughterComponent(double *x, double *par){
+    double t = x[0];
+    double lambda_p = par[0];
+    double lambda_d = par[1];
+    double lambda_gd = par[3];
+    double N0       = par[6];
+    double eff_gd   = par[11];
+    double Pn      = par[14];
+    double P2n     = par[15];
+    double branch_d = 1.0 - Pn - P2n;
+    if(branch_d<0) branch_d=0;
+
+    double denom1 = (lambda_d-lambda_p)*(lambda_gd-lambda_p);
+    double denom2 = (lambda_p-lambda_d)*(lambda_gd-lambda_d);
+    double denom3 = (lambda_p-lambda_gd)*(lambda_d-lambda_gd);
+    if(fabs(denom1)<1e-20) denom1=1e-20;
+    if(fabs(denom2)<1e-20) denom2=1e-20;
+    if(fabs(denom3)<1e-20) denom3=1e-20;
+
+    double Ngd = branch_d * N0 * lambda_p * lambda_d * (
+        exp(-lambda_p*t)/denom1 +
+        exp(-lambda_d*t)/denom2 +
+        exp(-lambda_gd*t)/denom3
+    );
+    return eff_gd*lambda_gd*Ngd + par[7];
+}
+// Beta-n daughter + background
+double BetaNDaughterComponent(double *x, double *par){
+    double t = x[0];
+    double lambda_p   = par[0];
+    double lambda_bn  = par[2];
+    double N0         = par[6];
+    double eff_bn     = par[10];
+    double Pn         = par[14];
+    double bg         = par[7];
+
+    double Nbn = Pn * N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
+    return eff_bn * lambda_bn * Nbn + bg;
+}
+
+// Beta-n granddaughter + background
+double BetaNGranddaughterComponent(double *x, double *par){
+    double t = x[0];
+    double lambda_p      = par[0];
+    double lambda_bn     = par[2];
+    double lambda_bn_gd  = par[5];
+    double N0            = par[6];
+    double eff_bn_gd     = par[13];
+    double Pn            = par[14];
+    double bg            = par[7];
+
+    double denom1 = (lambda_bn-lambda_p)*(lambda_bn_gd-lambda_p);
+    double denom2 = (lambda_p-lambda_bn)*(lambda_bn_gd-lambda_bn);
+    double denom3 = (lambda_p-lambda_bn_gd)*(lambda_bn-lambda_bn_gd);
+    if(fabs(denom1)<1e-20) denom1=1e-20;
+    if(fabs(denom2)<1e-20) denom2=1e-20;
+    if(fabs(denom3)<1e-20) denom3=1e-20;
+
+    double Nbgd = Pn * N0 * lambda_p * lambda_bn * (
+        exp(-lambda_p*t)/denom1 +
+        exp(-lambda_bn*t)/denom2 +
+        exp(-lambda_bn_gd*t)/denom3
+    );
+    return eff_bn_gd * lambda_bn_gd * Nbgd + bg;
+}
 // ---------------------------
 int main(int argc,char* argv[]){
     if(argc<8){ cout<<"Usage: ./bateman_fit <rebin> <low> <high> <rootfile> <histname> <paramfile> <result filename>\n"; return 1;}
@@ -343,11 +436,47 @@ int main(int argc,char* argv[]){
     c -> cd();
     h->SetLineColor(kBlack); h->Draw("E");
     fit -> Draw("same");
-    //hfit_total->SetLineColor(kOrange+2); hfit_total->Draw("same");
-    TLegend *leg=new TLegend(0.1,0.1,0.2,0.2);
-    leg->AddEntry(h,"Data","l");
-    leg->AddEntry(hfit_total,"Total Fit","l");
-    leg->Draw();
+	    // Draw individual components
+	TF1* f_parent = new TF1("Parent", ParentComponent, xmin, xmax, npars);
+	TF1* f_daughter = new TF1("Daughter", DaughterComponent, xmin, xmax, npars);
+	TF1* f_granddaughter = new TF1("Granddaughter", GranddaughterComponent, xmin, xmax, npars);
+	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, xmin, xmax, npars);
+	TF1* f_bn_granddaughter = new TF1("BetaN_Granddaughter", BetaNGranddaughterComponent, xmin, xmax, npars);
+
+	// Copy parameters from fit
+	for(int i=0;i<npars;i++){
+	    f_parent->SetParameter(i, fit->GetParameter(i));
+	    f_daughter->SetParameter(i, fit->GetParameter(i));
+	    f_granddaughter->SetParameter(i, fit->GetParameter(i));
+	    f_bn_daughter->SetParameter(i, fit->GetParameter(i));
+            f_bn_granddaughter->SetParameter(i, fit->GetParameter(i));
+	}
+
+	// Set line colors
+	f_parent->SetLineColor(kRed);
+	f_daughter->SetLineColor(kBlue);
+	f_granddaughter->SetLineColor(kGreen);
+	f_bn_daughter->SetLineColor(kBlue);
+	f_bn_granddaughter->SetLineColor(kGreen);
+
+	// Draw everything
+	h->Draw("E");
+	fit->Draw("same");               // total fit
+	f_parent->Draw("same");          // parent
+	f_daughter->Draw("same");        // daughter
+	f_granddaughter->Draw("same");   // granddaughter
+	f_bn_daughter->Draw("same");           // beta-n daughter
+	f_bn_granddaughter->Draw("same");      // beta-n granddaughter
+	// Legend
+	TLegend* leg = new TLegend(0.6,0.6,0.9,0.9);
+	leg->AddEntry(h,"Data","lep");
+	leg->AddEntry(fit,"Total Fit","l");
+	leg->AddEntry(f_parent,"Parent + bg","l");
+	leg->AddEntry(f_daughter,"Daughter + bg","l");
+	leg->AddEntry(f_granddaughter,"Granddaughter + bg","l");
+leg->AddEntry(f_bn_daughter,"Beta-n Daughter + bg","l");
+leg->AddEntry(f_bn_granddaughter,"Beta-n Granddaughter + bg","l");
+	leg->Draw();
     c->SaveAs("bateman_fit.png");
 
     TFile *fout = new TFile("bateman_fit_output.root","RECREATE");

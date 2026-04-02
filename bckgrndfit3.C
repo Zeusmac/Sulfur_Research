@@ -192,7 +192,7 @@ void PrintFitResultsAppend(TF1* fit, TFitResultPtr r, std::ofstream &file, const
         file<<std::setw(12)<<fit->GetParName(i);
         for(int j=0;j<n;j++)
         {
-            file<<std::setw(12)<<FormatNumber(r->Correlation(i,j));
+            file<<std::setw(12)<<FormatNumber(r->CovarianceMatrix()(i,j));
         }
         file<<"\n";
     }
@@ -282,7 +282,8 @@ void bckgrndfit3(const char* configfile="bckgrndsub_congfig.txt")
         fit2->SetParLimits(i,cfg.bounds2[2*i],cfg.bounds2[2*i+1]);
     }
 
-    TFitResultPtr r2 = bckgrnd->Fit(fit2,"SR");
+    TFitResultPtr r1 = gamma->Fit(fit1,"S R M E");
+    TFitResultPtr r2 = sub->Fit(fit2,"S R M E");
      
 
 	    // -------- Components for fit1 (gamma) --------

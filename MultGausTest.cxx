@@ -53,7 +53,8 @@ double decay_parent(double *dim, double *par)
   double bkgrd = par[2];
   double x = dim[0];
 
-  return  a * -b *  TMath::Exp(-(b) * (x)) + bkgrd;
+  if(x < 0) return bkgrd; 
+  return  a * b *  TMath::Exp(-(b) * (x)) + bkgrd;
 }
 
 Double_t decay_background(Double_t *dim, Double_t *par)
@@ -137,9 +138,9 @@ Double_t decay_nbeta(Double_t *dim, Double_t *par)
 void Decayp(TH1* hist,const char* filename, int bin)
 {
   double MinX, MaxX;
-  MaxX = hist -> GetXaxis() -> GetXmax();
-  MinX = hist -> GetXaxis() -> GetXmin();
-  MinX = 1;
+  MaxX = 5000; // hist -> GetXaxis() -> GetXmax();
+  MinX = 0; // hist -> GetXaxis() -> GetXmin();
+  //MinX = 1;
   hist -> Rebin(bin);
   //MaxX = ;
   TCanvas * fitgraph = new TCanvas("fits");
@@ -150,12 +151,12 @@ void Decayp(TH1* hist,const char* filename, int bin)
   decayp->SetParName(0, "source #     ");
   decayp->SetParName(1, "Source lambda");
   decayp->SetParName(2, "shift        ");
-  decayp->SetParameters(100, 
+  decayp->SetParameters(1000000, 
                         .004,
-                        20);
-  decayp->SetParLimits(0, 0, 4000);
-  decayp->SetParLimits(1, 0, 1);
-  decayp->SetParLimits(2, 0, 4000);
+                        2000000);
+  decayp->SetParLimits(0, 0, 100e7);
+  decayp->SetParLimits(1, .001, .1);
+  decayp->SetParLimits(2, 0, 100e6);
 
   for (int i = 0; i < decayp->GetNpar(); i++)
     {
@@ -185,25 +186,25 @@ void Decayp(TH1* hist,const char* filename, int bin)
   printf("Chi^2/NDF: %7f\n", chi2/NDF);
   hist -> Print("V");
 
-  TF1 * parent = new TF1("parent", "[0]", MinX, MaxX);
-  parent -> SetParameters(decayp ->GetParameter(2));
-  parent -> SetLineColor(kBlack);
+  TF1 * bck = new TF1("bck", "[0]", MinX, MaxX);
+  bck -> SetParameters(decayp ->GetParameter(2));
+  bck -> SetLineColor(kBlack);
 
   auto legend = new TLegend(0.7,0.4,.9,.7);
   legend->AddEntry(hist,"Data","E");
   legend->AddEntry(decayp,"Fit","l");
-  legend->AddEntry(parent,"Parent","l");
+  legend->AddEntry(bck,"bck","l");
 
   TString title = Form("%s;Time (ms);Counts", filename);	
   hist -> SetTitle(title);
   hist -> GetXaxis() -> CenterTitle(true);
   hist -> GetYaxis() -> CenterTitle(true);
   hist -> SetLineColor(kBlue);
-  hist->GetXaxis()->SetRangeUser(0.0, 1000);
+  hist->GetXaxis()->SetRangeUser(MinX, MaxX);
   hist -> Draw("E");
   decayp -> SetLineColor(kRed); 
   decayp -> Draw("same");
-  parent -> Draw("same");
+  bck -> Draw("same");
   //fitgraph -> SetLogy(); 
   fitgraph -> Draw("E");
   //legend-> Draw();
