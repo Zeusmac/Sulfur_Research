@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <cstdio>
 #include "TFitResult.h"
 #include "TFitResultPtr.h"
 
@@ -19,7 +20,21 @@ using namespace std;
 //////////////////////////////////////////////////////////////
 // Utility
 //////////////////////////////////////////////////////////////
-
+double chi2(TH1D* hist, TF1* eq){
+     double chi2_sum = 0;
+     for (int i = 1; i <= hist -> GetNbinsX(); ++i) {  // loop over bins 1..NbinsX
+         double x = hist->GetBinCenter(i);
+         double c = hist->GetBinContent(i);
+         if (c <= 0)  continue;  // skip empty bins
+         if (x < eq->GetXmin() || x > eq->GetXmax()) continue;
+ 
+         double model = eq->Eval(x);
+         double err2 = hist->GetBinError(i);
+         if (err2 <= 0) continue;  // avoid division by zero
+         chi2_sum += (model - c) * (model - c) / c;
+     }
+	return chi2_sum;
+}
 string FormatNumber(double x){
     std::ostringstream ss;
     double ax = fabs(x);
@@ -219,22 +234,36 @@ void PrintFitResultsAppend(TF1* fit, TFitResultPtr r, ofstream &file,
     // -------------------------
     // Correlation matrix
     // -------------------------
-    int n = fit->GetNpar();
 
-    file << "\n---------------- Correlation Matrix ----------------\n\n";
+// Save current stdout
+FILE* old_stdout = stdout;
 
-    file << setw(12) << "";
-    for(int j=0;j<n;j++)
-        file << setw(12) << fit->GetParName(j);
-    file << "\n";
+// Redirect stdout to file
+FILE* file_stdout = freopen("matrix_output.txt", "w", stdout);
 
-    for(int i=0;i<n;i++){
-        file << setw(12) << fit->GetParName(i);
-        for(int j=0;j<n;j++){
-            file << setw(12) << FormatNumber(r->Correlation(i,j));
-        }
-        file << "\n";
-    }
+// Call verbose print
+r->Print("V");
+
+// Flush and restore stdout
+fflush(stdout);
+stdout = old_stdout;
+
+//    int n = fit->GetNpar();	
+	//file << r->Print("V") << endl;
+ //file << "\n---------------- Correlation Matrix ----------------\n\n";
+
+ //   file << setw(12) << "";
+ //   for(int j=0;j<n;j++)
+ //       file << setw(12) << fit->GetParName(j);
+ //   file << "\n";
+
+ //   for(int i=0;i<n;i++){
+      //  file << setw(12) << fit->GetParName(i);
+    //    for(int j=0;j<n;j++){
+    //        file << setw(12) << FormatNumber(r->Correlation(i,j));
+  //      }
+//        file << "\n";
+//    }
 
     file << "\n============================================================\n";
 }
@@ -264,21 +293,21 @@ double TotalModelFull(double *x, double *par){
 
 
 
-    if(t < 0) return bg;
+   //if(t < 0) return bg;
 
     // physical limits
-    double rate = 0.0;
+    double rate = 0;
 
     // -------- Parent --------
     double Np = N0 * exp(-lambda_p*t);
     rate +=  Np;
 
     // -------- Daughter --------
-    double Nd = N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
+    double Nd = N0 * (1/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
     rate +=  eff_d * lambda_d * Nd;
 
     // -------- Beta-n daughter --------
-    double Nbn =  N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
+    double Nbn =  N0 * (1/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
     rate += eff_bn * lambda_bn * Nbn;
 
    // --------- expo bckgrnd----------
@@ -296,7 +325,7 @@ double ParentComponent(double *x, double *par){
     double N0       = par[5];
     double bg       = par[6];
     double Np = N0*exp(-lambda_p*t);
-    return lambda_p*Np;
+    return Np;
 }
 
 double DaughterComponent(double *x, double *par){
@@ -306,7 +335,7 @@ double DaughterComponent(double *x, double *par){
     double N0       = par[5];
     double eff_d    = par[8] + par[7]*par[7];
     double bg = par[6];
-    double Nd =  N0 * (lambda_p/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
+    double Nd =  N0 * (1/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
     return eff_d*lambda_d*Nd;
 }
 
@@ -318,9 +347,8 @@ double BetaNDaughterComponent(double *x, double *par){
     double lambda_bn  = par[2];
     double N0         = par[5];
     double eff_bn     = par[8];
-    double bg         = par[6];
 
-    double Nbn =  N0 * (lambda_p/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
+    double Nbn =  N0 * (1/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
     return eff_bn * lambda_bn * Nbn;
 }
 
@@ -328,7 +356,6 @@ double Expobg(double *x, double *par){
     double t = x[0];
     double lambda_b = par[3];
     double Nb       = par[4];
-    double bg       = par[6];
     double Nbg = Nb*exp(-lambda_b*t);
     return Nbg;
 }
@@ -355,8 +382,8 @@ int main(int argc,char* argv[])
 		fit->SetParLimits(i,cfg.bounds[i].first,cfg.bounds[i].second);
 	}
 
-	TFitResultPtr result = h->Fit("fit","S R E","",cfg.xmin,cfg.xmax);
- 	result -> Print("V");
+	TFitResultPtr result = h->Fit("fit","S R M E","",cfg.xmin,cfg.xmax);
+ 
 	// Save results
 	ofstream out(cfg.outfile);
 	PrintFitResultsAppend(fit,result,out,"Fit",
@@ -375,13 +402,14 @@ int main(int argc,char* argv[])
 			}
 		}
 	}
+	cout << "eff_d: "<< (fit-> GetParameter(8) + (fit->GetParameter(7))*(fit -> GetParameter(7))) << endl;
+	cout << chi2(h,fit) << endl;
 	TCanvas *c = new TCanvas("c","Fit",800,600);
 	    // Draw individual components
 	TF1* f_parent = new TF1("Parent", ParentComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_daughter = new TF1("Daughter", DaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_expbg = new TF1("expbg", Expobg, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_bck = new TF1("f_bck", "[0]", cfg.xmin, cfg.xmax);
 	
 	// Copy parameters from fit
 	for(int i=0;i<fit->GetNpar();i++){
@@ -390,37 +418,44 @@ int main(int argc,char* argv[])
 	    f_bn_daughter->SetParameter(i, fit->GetParameter(i));
 	    f_expbg->SetParameter(i, fit->GetParameter(i));
 	}
-	f_bck -> SetParameter(0,fit -> GetParameter(6));
 	// Set line colors
 	f_parent->SetLineColor(kOrange);
 	f_daughter->SetLineColor(kYellow + 1);
 	f_expbg->SetLineColor(kGreen);
 	f_bn_daughter->SetLineColor(kBlue - 4);
-	f_bck -> SetLineColor(kRed);
 	// Draw everything
+//	c -> SetLogy();
 	h->Draw("E");
+	//int MaxY = h -> GetBinContent(1);
+//	h -> GetYaxis()->SetRangeUser(0,MaxY + 4000);
 	fit->Draw("same");               // total fit
 	f_parent->Draw("same");          // parent
 	f_daughter->Draw("same");        // daughter
 	f_expbg->Draw("same");   // granddaughter
 	f_bn_daughter->Draw("same");           // beta-n daughter
-	f_bck ->Draw("same");      // background
 	// Legend
 	TLegend* leg = new TLegend(0.6,0.6,0.9,0.9);
 	leg->AddEntry(h,"Data","lep");
 	leg->AddEntry(fit,"Total Fit","l");
 	leg->AddEntry(f_parent,"Parent","l");
 	leg->AddEntry(f_daughter,"Daughter","l");
-	leg->AddEntry(f_expbg,"Expo Backgrnd","l");
 	leg->AddEntry(f_bn_daughter,"Beta-n Daughter","l");
-	leg->AddEntry(f_bck,"Bck","l");
+	leg->AddEntry(f_expbg,"Expo Backgrnd","l");
+	//leg->AddEntry(f_bck,"Bck","l");
 	leg->Draw();
-	string output = argv[2];
-	c->SaveAs(output.c_str());
 	c -> Update();
+	string output =argv[2];
+	TFile* outf = new TFile("ActvitiyFits.root", "RECREATE");
+	if (!f || f->IsZombie()) {
+   	     std::cerr << "Error opening file\n";
+	}
+	c -> Write();
+	h -> Write();
+	fit ->Write();
+	f_parent-> Write();
+	f_daughter -> Write();
+	f_expbg -> Write();
+	f_bn_daughter -> Write();
 	app.Run();
-	cout << "eff_d: "<< (fit-> GetParameter(8) + (fit->GetParameter(7))*(fit -> GetParameter(7))) << endl;
-	cout<<"Done. Results saved.\n";
-
 	return 0;
 }
