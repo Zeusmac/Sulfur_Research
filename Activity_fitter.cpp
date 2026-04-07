@@ -96,7 +96,7 @@ bool GetPars(FitConfig &cfg, const string &filename)
 
     return true;
 }
-void PrintFitResultsAppend(TH1D* h,TF1* fit, TFitResultPtr r, ofstream &file,
+void PrintFitResultsAppend(TF1* fit, TFitResultPtr r, ofstream &file,
                           const string &label,
                           const vector<double> &init,
                           const vector<pair<double,double>> &bounds,
@@ -230,13 +230,6 @@ void PrintFitResultsAppend(TH1D* h,TF1* fit, TFitResultPtr r, ofstream &file,
                  << errStr << "\n";
         }
     }
-    file << "\n--------------------My chi2/eff_d/eff_bn -----------------------\n";
-    double a = fit-> GetParameter(6);
-    double b = (fit->GetParameter(7));
-    double denom = 1 + a*a + b*b;
-    file << "eff_d: "<< (a*a + b*b)/denom << endl;
-    file << "eff_bn: "<< (b*b)/denom << endl;
-    file << chi2(h,fit) << endl;
 
     // -------------------------
     // Correlation matrix
@@ -294,10 +287,13 @@ double TotalModelFull(double *x, double *par){
     double lambda_b   	 = par[3]; 
     double Nb		 = par[4];
     double N0            = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_d         = (par[6]*par[6] + par[7]*par[7]/denom);
-    double eff_bn        =  (par[7]*par[7]/denom);
-    
+
+    double eff_d         = par[7] + par[6]*par[6];
+    double eff_bn        = par[7];
+
+
+
+   //if(t < 0) return bg;
 
     // physical limits
     double rate = 0;
@@ -317,8 +313,7 @@ double TotalModelFull(double *x, double *par){
    // --------- expo bckgrnd----------
     double Nbg = Nb * exp(-lambda_b*t);
     rate += Nbg;
-
-    if(t < 0) return Nb*exp(lambda_b*t);
+    
     return rate;
 }
 // ---------------------------
@@ -329,7 +324,7 @@ double ParentComponent(double *x, double *par){
     double lambda_p = par[0];
     double N0       = par[5];
     double bg       = par[6];
-    double Np = N0 * exp(-lambda_p*t);
+    double Np = N0*exp(-lambda_p*t);
     return Np;
 }
 
@@ -338,10 +333,10 @@ double DaughterComponent(double *x, double *par){
     double lambda_p = par[0];
     double lambda_d = par[1];
     double N0       = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_d         = (par[6]*par[6]+ par[7]*par[7])/denom;
+    double eff_d    = par[8] + par[7]*par[7];
+    double bg = par[6];
     double Nd =  N0 * (1/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
-    return eff_d* lambda_d * Nd;
+    return eff_d*lambda_d*Nd;
 }
 
 // Similarly define for other components: Granddaughter, Beta-n daughter, Beta-n granddaughter, Beta-2n daughter
@@ -351,8 +346,8 @@ double BetaNDaughterComponent(double *x, double *par){
     double lambda_p   = par[0];
     double lambda_bn  = par[2];
     double N0         = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_bn        =  (par[6]*par[6]/denom);
+    double eff_bn     = par[8];
+
     double Nbn =  N0 * (1/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
     return eff_bn * lambda_bn * Nbn;
 }
@@ -368,7 +363,7 @@ double Expobg(double *x, double *par){
 int main(int argc,char* argv[])
 {
 	if(argc < 3){
-		std::cout<<"Usage: ./fit config.txt <rootfilename> <setlogy>\n";
+		std::cout<<"Usage: ./fit config.txt <rootfilename>\n";
 		return 1;
 	}
 	FitConfig cfg;
@@ -387,11 +382,11 @@ int main(int argc,char* argv[])
 		fit->SetParLimits(i,cfg.bounds[i].first,cfg.bounds[i].second);
 	}
 
-	TFitResultPtr result = h->Fit("fit","S R M ","",cfg.xmin,cfg.xmax);
+	TFitResultPtr result = h->Fit("fit","S R M E","",cfg.xmin,cfg.xmax);
  
 	// Save results
 	ofstream out(cfg.outfile);
-	PrintFitResultsAppend(h,fit,result,out,"Fit",
+	PrintFitResultsAppend(fit,result,out,"Fit",
 		      cfg.init,cfg.bounds,
 		      cfg.rebin,cfg.xmin,cfg.xmax);
 	out.close();
@@ -407,6 +402,8 @@ int main(int argc,char* argv[])
 			}
 		}
 	}
+	cout << "eff_d: "<< (fit-> GetParameter(8) + (fit->GetParameter(7))*(fit -> GetParameter(7))) << endl;
+	cout << chi2(h,fit) << endl;
 	TCanvas *c = new TCanvas("c","Fit",800,600);
 	    // Draw individual components
 	TF1* f_parent = new TF1("Parent", ParentComponent, cfg.xmin, cfg.xmax, cfg.init.size());
@@ -427,7 +424,7 @@ int main(int argc,char* argv[])
 	f_expbg->SetLineColor(kGreen);
 	f_bn_daughter->SetLineColor(kBlue - 4);
 	// Draw everything
-	if(stoi(argv[3]) == 1) c -> SetLogy();
+//	c -> SetLogy();
 	h->Draw("E");
 	//int MaxY = h -> GetBinContent(1);
 //	h -> GetYaxis()->SetRangeUser(0,MaxY + 4000);
