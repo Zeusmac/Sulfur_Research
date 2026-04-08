@@ -1,7 +1,7 @@
 void gammaplot()
 {
     // --- Open ROOT files ---
-    TFile * f = new TFile("Mar_26_26/2789/fit_g2783-2790_bg2800-2807_bin10.root");
+    TFile * f = new TFile("Mar_26_26/Bestfits/fit_g2783-2790_bg2800-2807_bin10.root");
     TFile * f1 = new TFile("Mar_26_26/Bestfits/328peakfit_bin30.root");
     TFile * f2 = new TFile("Mar_26_26/Bestfits/Npeak328fit_bin30.root");
 

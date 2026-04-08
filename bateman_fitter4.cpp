@@ -232,28 +232,14 @@ void PrintFitResultsAppend(TH1D* h,TF1* fit, TFitResultPtr r, ofstream &file,
     }
     file << "\n--------------------My chi2/eff_d/eff_bn -----------------------\n";
     double a = fit-> GetParameter(6);
-    double b = (fit->GetParameter(7));
-    double denom = 1 + a*a + b*b;
-    file << "eff_d: "<< (a*a + b*b)/denom << endl;
-    file << "eff_bn: "<< (b*b)/denom << endl;
+    file << "eff_d: "<< (a) << endl;
+    file << "eff_bn: "<< (1-a) << endl;
     file << chi2(h,fit) << endl;
 
     // -------------------------
     // Correlation matrix
     // -------------------------
 
-// Save current stdout
-FILE* old_stdout = stdout;
-
-// Redirect stdout to file
-FILE* file_stdout = freopen("matrix_output.txt", "w", stdout);
-
-// Call verbose print
-r->Print("V");
-
-// Flush and restore stdout
-fflush(stdout);
-stdout = old_stdout;
 
 //    int n = fit->GetNpar();	
 	//file << r->Print("V") << endl;
@@ -294,9 +280,8 @@ double TotalModelFull(double *x, double *par){
     double lambda_b   	 = par[3]; 
     double Nb		 = par[4];
     double N0            = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_d         = (par[6]*par[6] + par[7]*par[7]/denom);
-    double eff_bn        =  (par[7]*par[7]/denom);
+    double eff_d         = par[6];
+    double eff_bn        =  (1 - par[6]);
     
 
     // physical limits
@@ -338,8 +323,7 @@ double DaughterComponent(double *x, double *par){
     double lambda_p = par[0];
     double lambda_d = par[1];
     double N0       = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_d         = (par[6]*par[6]+ par[7]*par[7])/denom;
+    double eff_d         = par[6];
     double Nd =  N0 * (1/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
     return eff_d* lambda_d * Nd;
 }
@@ -351,8 +335,7 @@ double BetaNDaughterComponent(double *x, double *par){
     double lambda_p   = par[0];
     double lambda_bn  = par[2];
     double N0         = par[5];
-    double denom = 1 + par[6]*par[6] + par[7]*par[7];
-    double eff_bn        =  (par[6]*par[6]/denom);
+    double eff_bn        =  (1 - par[6]);
     double Nbn =  N0 * (1/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
     return eff_bn * lambda_bn * Nbn;
 }
@@ -367,10 +350,15 @@ double Expobg(double *x, double *par){
 // ---------------------------
 int main(int argc,char* argv[])
 {
-	if(argc < 3){
-		std::cout<<"Usage: ./fit config.txt <rootfilename> <setlogy>\n";
+	if(argc < 2){
+		std::cout<<"Usage: ./fit config.txt <FitOptions> <setlogy>\n";
+		std::cout<< "./fit -h for options description" << endl;
 		return 1;
 	}
+	if(std::string(argv[1]) == "-h"){
+		std::cout<< "fit options: 0 Default Migrad with HESSE\n 1 Default Migrad with MINOS\n 2 Improved Migrad with HESSE\n 3 Improved Migrad with MINOS\n To SetLogY == 1" << endl;
+		return 1;
+	}  
 	FitConfig cfg;
 	if(!GetPars(cfg, argv[1])) return 1;
         TApplication app("app", &argc, argv);
@@ -386,11 +374,16 @@ int main(int argc,char* argv[])
 		fit->SetParameter(i,cfg.init[i]);
 		fit->SetParLimits(i,cfg.bounds[i].first,cfg.bounds[i].second);
 	}
-
-	TFitResultPtr result = h->Fit("fit","S R M ","",cfg.xmin,cfg.xmax);
+	TString fitoptions = "S R";
+	int option = 0;
+	if(!(argv[2] == NULL)) option = stoi(argv[2]); 	
+	if(option == 1) fitoptions + " E" ;   
+	if(option == 2) fitoptions + " M";  
+	if(option == 3) fitoptions + " M E";  
+	TFitResultPtr result = h->Fit("fit",fitoptions,"",cfg.xmin,cfg.xmax);
  
 	// Save results
-	ofstream out(cfg.outfile);
+	ofstream out(cfg.outfile + ".txt");
 	PrintFitResultsAppend(h,fit,result,out,"Fit",
 		      cfg.init,cfg.bounds,
 		      cfg.rebin,cfg.xmin,cfg.xmax);
@@ -409,10 +402,10 @@ int main(int argc,char* argv[])
 	}
 	TCanvas *c = new TCanvas("c","Fit",800,600);
 	    // Draw individual components
-	TF1* f_parent = new TF1("Parent", ParentComponent, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_daughter = new TF1("Daughter", DaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
-	TF1* f_expbg = new TF1("expbg", Expobg, cfg.xmin, cfg.xmax, cfg.init.size());
+	TF1* f_parent = new TF1("Parent", ParentComponent, -1000, cfg.xmax, cfg.init.size());
+	TF1* f_daughter = new TF1("Daughter", DaughterComponent, -1000, cfg.xmax, cfg.init.size());
+	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, -1000, cfg.xmax, cfg.init.size());
+	TF1* f_expbg = new TF1("expbg", Expobg, -1000, cfg.xmax, cfg.init.size());
 	
 	// Copy parameters from fit
 	for(int i=0;i<fit->GetNpar();i++){
@@ -422,12 +415,15 @@ int main(int argc,char* argv[])
 	    f_expbg->SetParameter(i, fit->GetParameter(i));
 	}
 	// Set line colors
+	c -> cd();
 	f_parent->SetLineColor(kOrange);
 	f_daughter->SetLineColor(kYellow + 1);
 	f_expbg->SetLineColor(kGreen);
 	f_bn_daughter->SetLineColor(kBlue - 4);
 	// Draw everything
-	if(stoi(argv[3]) == 1) c -> SetLogy();
+	int logy = 0;
+	if(!(argv[3] == NULL)) logy = stoi(argv[3]); 
+	if(logy == 1) c -> SetLogy();
 	h->Draw("E");
 	//int MaxY = h -> GetBinContent(1);
 //	h -> GetYaxis()->SetRangeUser(0,MaxY + 4000);
@@ -447,8 +443,19 @@ int main(int argc,char* argv[])
 	//leg->AddEntry(f_bck,"Bck","l");
 	leg->Draw();
 	c -> Update();
-	string output =argv[2];
-	TFile* outf = new TFile("ActvitiyFits.root", "RECREATE");
+	// Save current stdout
+	FILE* old_stdout = stdout;
+
+	// Redirect stdout to file
+	FILE* file_stdout = freopen((cfg.outfile + "Matrix.txt").c_str(), "w", stdout);
+
+	// Call verbose print
+	result->Print("V");
+
+	// Flush and restore stdout
+	fflush(stdout);
+	stdout = old_stdout;
+	TFile* outf = new TFile((cfg.outfile + ".root").c_str(), "RECREATE");
 	if (!f || f->IsZombie()) {
    	     std::cerr << "Error opening file\n";
 	}
@@ -459,6 +466,7 @@ int main(int argc,char* argv[])
 	f_daughter -> Write();
 	f_expbg -> Write();
 	f_bn_daughter -> Write();
+	outf -> Close();
 	app.Run();
 	return 0;
 }
