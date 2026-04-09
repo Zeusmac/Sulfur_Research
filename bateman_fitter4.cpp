@@ -6,9 +6,11 @@
 #include <vector>
 #include <string>
 #include <cstdio>
+
+#include "TBrowser.h"
 #include "TFitResult.h"
 #include "TFitResultPtr.h"
-
+#include "TGraphErrors.h"
 #include "TFile.h"
 #include "TH1D.h"
 #include "TF1.h"
@@ -356,16 +358,16 @@ int main(int argc,char* argv[])
 		return 1;
 	}
 	if(std::string(argv[1]) == "-h"){
-		std::cout<< "fit options: 0 Default Migrad with HESSE\n 1 Default Migrad with MINOS\n 2 Improved Migrad with HESSE\n 3 Improved Migrad with MINOS\n To SetLogY == 1" << endl;
+		std::cout<< "fit options: 0\n Default Migrad with HESSE\n 1 Default Migrad with MINOS\n 2 Improved Migrad with HESSE\n 3 Improved Migrad with MINOS\n 4 LogLiklihood fit\n To SetLogY == 1" << endl;
 		return 1;
 	}  
 	FitConfig cfg;
 	if(!GetPars(cfg, argv[1])) return 1;
-        TApplication app("app", &argc, argv);
 	TFile *f = TFile::Open(cfg.filename.c_str());
 	TH1D* h = (TH1D*)f->Get(cfg.histname.c_str());
-
+	
 	h->Rebin(cfg.rebin);
+	TGraphErrors *gr = new TGraphErrors(h);
 
 	TF1 *fit = new TF1("fit",TotalModelFull,cfg.xmin,cfg.xmax,cfg.init.size());
 
@@ -377,10 +379,12 @@ int main(int argc,char* argv[])
 	TString fitoptions = "S R";
 	int option = 0;
 	if(!(argv[2] == NULL)) option = stoi(argv[2]); 	
-	if(option == 1) fitoptions + " E" ;   
-	if(option == 2) fitoptions + " M";  
-	if(option == 3) fitoptions + " M E";  
-	TFitResultPtr result = h->Fit("fit",fitoptions,"",cfg.xmin,cfg.xmax);
+	if(option == 1) fitoptions += " E" ;   
+	if(option == 2) fitoptions += " M";  
+	if(option == 3) fitoptions += " M E"; 
+	if(option == 4) fitoptions += " L"; 
+	cout <<" fitoptions :" << fitoptions << endl; 
+	TFitResultPtr result = gr->Fit("fit",fitoptions,"",cfg.xmin,cfg.xmax);
  
 	// Save results
 	ofstream out(cfg.outfile + ".txt");
@@ -406,7 +410,6 @@ int main(int argc,char* argv[])
 	TF1* f_daughter = new TF1("Daughter", DaughterComponent, -1000, cfg.xmax, cfg.init.size());
 	TF1* f_bn_daughter = new TF1("BetaN_Daughter", BetaNDaughterComponent, -1000, cfg.xmax, cfg.init.size());
 	TF1* f_expbg = new TF1("expbg", Expobg, -1000, cfg.xmax, cfg.init.size());
-	
 	// Copy parameters from fit
 	for(int i=0;i<fit->GetNpar();i++){
 	    f_parent->SetParameter(i, fit->GetParameter(i));
@@ -414,31 +417,41 @@ int main(int argc,char* argv[])
 	    f_bn_daughter->SetParameter(i, fit->GetParameter(i));
 	    f_expbg->SetParameter(i, fit->GetParameter(i));
 	}
+	//Adding expo background to componets for visiablility
+	TF1 *f_p = new TF1("f_p", [&](double *x, double *p){return f_expbg->Eval(x[0]) + f_parent->Eval(x[0]);}, -1000, cfg.xmax, cfg.init.size());
+	TF1 *f_d = new TF1("f_d", [&](double *x, double *p){return f_expbg->Eval(x[0]) + f_daughter->Eval(x[0]);}, -1000, cfg.xmax, cfg.init.size());
+	TF1 *f_bnd = new TF1("f_bnd", [&](double *x, double *p){return f_expbg->Eval(x[0]) + f_bn_daughter->Eval(x[0]);}, -1000, cfg.xmax, cfg.init.size());
+
 	// Set line colors
 	c -> cd();
-	f_parent->SetLineColor(kOrange);
-	f_daughter->SetLineColor(kYellow + 1);
+	f_p->SetLineColor(kOrange);
+	f_d->SetLineColor(kYellow + 1);
 	f_expbg->SetLineColor(kGreen);
-	f_bn_daughter->SetLineColor(kBlue - 4);
+	f_bnd->SetLineColor(kBlue - 4);
+
 	// Draw everything
 	int logy = 0;
 	if(!(argv[3] == NULL)) logy = stoi(argv[3]); 
-	if(logy == 1) c -> SetLogy();
-	h->Draw("E");
-	//int MaxY = h -> GetBinContent(1);
-//	h -> GetYaxis()->SetRangeUser(0,MaxY + 4000);
-	fit->Draw("same");               // total fit
-	f_parent->Draw("same");          // parent
-	f_daughter->Draw("same");        // daughter
+	gr->Draw("AP");
+	//gr->SetMinimum(0.1); // to let log scale work 
+	
+	fit -> Draw("same");
+	f_p->Draw("same");          // parent
+	f_d->Draw("same");        // daughter
 	f_expbg->Draw("same");   // granddaughter
-	f_bn_daughter->Draw("same");           // beta-n daughter
+	f_bnd->Draw("same");           // beta-n daughter
+	//f_p -> SetMinimum(.1);
+	//f_d -> SetMinimum(.1);
+	//f_expbg -> SetMinimum(.1);
+	//f_bnd -> SetMinimum(.1);
+	if(logy == 1) c -> SetLogy();
 	// Legend
-	TLegend* leg = new TLegend(0.6,0.6,0.9,0.9);
+	TLegend* leg = new TLegend(0.2,0.1,0.6,0.4);
 	leg->AddEntry(h,"Data","lep");
 	leg->AddEntry(fit,"Total Fit","l");
-	leg->AddEntry(f_parent,"Parent","l");
-	leg->AddEntry(f_daughter,"Daughter","l");
-	leg->AddEntry(f_bn_daughter,"Beta-n Daughter","l");
+	leg->AddEntry(f_p,"Parent","l");
+	leg->AddEntry(f_d,"Daughter","l");
+	leg->AddEntry(f_bnd,"Beta-n Daughter","l");
 	leg->AddEntry(f_expbg,"Expo Backgrnd","l");
 	//leg->AddEntry(f_bck,"Bck","l");
 	leg->Draw();
@@ -467,6 +480,8 @@ int main(int argc,char* argv[])
 	f_expbg -> Write();
 	f_bn_daughter -> Write();
 	outf -> Close();
+	TApplication app("app", &argc, argv);
+	TBrowser * n = new TBrowser();
 	app.Run();
 	return 0;
 }
