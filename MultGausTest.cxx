@@ -505,9 +505,11 @@ void MultGausFit(TH1 *hist, double lower, double upper){
       F->SetParName(2, "sigma");
       F->SetParName(3, "slope");
       F->SetParName(4, "intercept");
-      F->SetParLimits(0, 0, 50000);
+      F->SetParLimits(0, 0,2e6);
       F->SetParLimits(1, lower, upper);
-      F->SetParLimits(4, 0, 50000);
+      F->SetParLimits(2, 0, 100);
+      F->SetParLimits(4, 0, 2e6);
+      F->SetParameters(719652,2786.81,1.63737,2.9846e+06,-1051.826);
       //hist->GetListOfFunctions()->Add(F);
       hist->Fit(F, "SR","", lower, upper);
       hist -> Print("V");
@@ -516,5 +518,5 @@ void MultGausFit(TH1 *hist, double lower, double upper){
       fitgraph -> Draw("E");
       fitgraph -> SaveAs("Peak1155KeV.png");
       
-  //}
+ // }
 }
