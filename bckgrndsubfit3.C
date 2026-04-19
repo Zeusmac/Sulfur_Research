@@ -365,8 +365,8 @@ void bckgrndsubfit3(const char* configfile="bckgrndsub_config.txt")
         fit2->SetParLimits(i,cfg.bounds2[i].first,cfg.bounds2[i].second);
     }
 
-    TFitResultPtr r1 = gamma->Fit(fit1,"S R M E");
-    TFitResultPtr r2 = sub->Fit(fit2,"S R M E");
+    TFitResultPtr r1 = gamma->Fit(fit1,"S R L E");
+    TFitResultPtr r2 = sub->Fit(fit2,"S R L E");
     	
     // --- Components ---
     TF1* p1 = new TF1("p1", ParentComponent, cfg.Xmin,cfg.Xmax,3);
@@ -446,6 +446,6 @@ void bckgrndsubfit3(const char* configfile="bckgrndsub_config.txt")
     bckgrnd -> Write();
     sub -> Write();
     c->Write();
-    outfile.Close();
+    outfile -> Close();
     cout<<"Canvas saved as: "<<rootfile<<endl;
 }

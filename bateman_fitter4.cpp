@@ -213,7 +213,7 @@ class bfitter {
 
 	    if(use_expo_bg == 1) rate += Nbg;
 
-	    if(t < 0 && (use_expo_bg == 1)) return Nb*exp(lambda_b*t);
+//	    if(t < 0 && (use_expo_bg == 1)) return Nb*exp(lambda_b*t);
 	    return rate;
 	}
 };
@@ -221,12 +221,21 @@ class bfitter {
 // ---------------------------
 // Component functions with background
 // ---------------------------
+
+double Expobg(double *x, double *par){
+    double t = x[0];
+    double lambda_b = par[6];
+    double Nb       = par[7];
+    double bg       = par[5];
+    double Nbg = Nb*exp(-lambda_b*t);
+    return Nbg;
+}
 double ParentComponent(double *x, double *par){
     double t = x[0];
     double lambda_p = par[0];
     double N0       = par[3];
     double bg 	    = par[5];
-    double Np = N0 * exp(-lambda_p*t) + bg;
+    double Np = N0 * exp(-lambda_p*t);
     return Np;
 }
 
@@ -238,7 +247,7 @@ double DaughterComponent(double *x, double *par){
    double bg       = par[5];
     double eff_d         = par[4];
     double Nd =  N0 * (1/(lambda_d-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_d*t));
-    return eff_d* lambda_d * Nd + bg;
+    return eff_d* lambda_d * Nd;
 }
 
 // Similarly define for other components: Granddaughter, Beta-n daughter, Beta-n granddaughter, Beta-2n daughter
@@ -251,17 +260,9 @@ double BetaNDaughterComponent(double *x, double *par){
     double bg       = par[5];
     double eff_bn        =  (1 - par[4]);
     double Nbn =  N0 * (1/(lambda_bn-lambda_p)) * (exp(-lambda_p*t)-exp(-lambda_bn*t));
-    return eff_bn * lambda_bn * Nbn + bg;
+    return eff_bn * lambda_bn * Nbn;
 }
 
-double Expobg(double *x, double *par){
-    double t = x[0];
-    double lambda_b = par[6];
-    double Nb       = par[7];
-    double bg       = par[5];
-    double Nbg = Nb*exp(-lambda_b*t);
-    return Nbg + bg;
-}
 
 void PrintFitResultsAppend(TH1D* h,TF1* fit, TFitResultPtr r, ofstream &file,
                           string filename,TString fitoptions,const string &label,
@@ -452,6 +453,7 @@ int main(int argc,char* argv[])
 	TH1D* h = (TH1D*)f->Get(cfg.histname.c_str());
 	h ->Sumw2();
 	h->Rebin(cfg.rebin);
+	h->SetMinimum(0.1);
 	int t = h->GetNbinsX();
 	TGraphErrors* gr = new TGraphErrors(t);
 
@@ -461,10 +463,15 @@ int main(int argc,char* argv[])
 
     		double ey = TMath::Sqrt(y);   // Poisson error
     		double ex = 0;//cfg.rebin;         // usually zero unless you want bin width
-
+		
+		if (y <= 0) continue;  // so logy will work
+		
     		gr->SetPoint(i, x, y);
     		gr->SetPointError(i, ex, ey);
-	}	
+	}
+	double ymin = std::max(0.1, h->GetMinimum());
+	gr->SetMinimum(ymin); 
+	gr->SetMaximum(h->GetMaximum()*1.5);	
 	//TGraphErrors *gr = new TGraphErrors(h);
 	cout << "N parameters: " << cfg.init.size() << endl;
 	TF1 *fit = new TF1("fit",
@@ -515,10 +522,10 @@ int main(int argc,char* argv[])
 	TCanvas *c = new TCanvas("c","Fit",800,600);
 	    // Draw individual components
 	
-	TF1* f_bg = new TF1("bg","[0]", cfg.xmax);
-	TF1* f_expbg = new TF1("expbg", Expobg, 0, cfg.xmax, cfg.init.size());
-	TF1* f_p = new TF1("Parent", ParentComponent, 0, cfg.xmax, cfg.init.size());
-	TF1* f_d = new TF1("Daughter", DaughterComponent, 0, cfg.xmax, cfg.init.size());
+	TF1* f_bg = new TF1("bg","[0]",cfg.xmin,cfg.xmax);
+	TF1* f_expbg = new TF1("expbg", Expobg, cfg.xmin, cfg.xmax, cfg.init.size());
+	TF1* f_p = new TF1("Parent", ParentComponent, cfg.xmin, cfg.xmax, cfg.init.size());
+	TF1* f_d = new TF1("Daughter", DaughterComponent, cfg.xmin, cfg.xmax, cfg.init.size());
 	TF1* f_bnd = new TF1("BetaN_Daughter", BetaNDaughterComponent, 0, cfg.xmax, cfg.init.size());
 	// Copy parameters from fit
 	for(int i=0;i<fit->GetNpar();i++){
@@ -538,12 +545,11 @@ int main(int argc,char* argv[])
 
 	// Draw everything
 	int logy = 0;
-	if(!(argv[3] == NULL)) logy = stoi(argv[3]); 
+	if(!(argv[3] == NULL)) logy = stoi(argv[3]);
+	gr->GetXaxis()->SetLimits(cfg.xmin,cfg.xmax);
 	if(logy == 1) c -> SetLogy();
-	gr->Draw("AP");
-	//gr->SetMinimum(0.1); // to let log scale work 
-	gr->SetMinimum(h->GetMinimum()*.77777775);
-	gr->SetMaximum(h->GetMaximum());	
+	gPad->DrawFrame(0, 0.1, 4000, h->GetMaximum()*1.5);
+	gr -> Draw("P SAME");
 	fit -> Draw("same");
 	f_p->Draw("same");          // parent
 	f_d->Draw("same");        // daughter
@@ -569,7 +575,8 @@ int main(int argc,char* argv[])
 	gr->GetYaxis()->SetTitle(Form("Counts| %i ms per bin",cfg.rebin));
 	gr->GetXaxis()->SetTitle("ms");
 	gr->GetXaxis()->CenterTitle(true);  	
-	gr->GetYaxis()->CenterTitle(true);  	
+	gr->GetYaxis()->CenterTitle(true);
+//	c -> Update();  	
 //	TGraph * grChi = ChiVsPar(h,fit,result,0,.001);// making a graph of chi2 vs lambda_p
 //	grChi->SetName("ChiVsPar");
 //	grChi->SetTitle("Delta Chi^2 vs Parameter;Parameter;#Delta#chi^{2}");
