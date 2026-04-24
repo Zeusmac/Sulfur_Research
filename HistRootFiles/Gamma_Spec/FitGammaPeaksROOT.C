@@ -29,9 +29,7 @@ void FitGammaPeaksROOT() {
         std::cout << "Histogram not found!" << std::endl;
         return;
     }
-    TGraphErrors * gr = new TGraphErrors(h); 
      h-> Sumw2(kTRUE);
-//    h -> Rebin(2);
     TFitResultPtr result[50];	
     // -------------------------------
     // Peak search using TSpectrum
@@ -57,6 +55,7 @@ void FitGammaPeaksROOT() {
     for (int i = 0; i < nPeaks; i++) {
 
         double peakX = xPeaks[i];
+	int bin = h->FindBin(peakX);
 	if (h->GetBinContent(h->FindBin(peakX)) < 50) continue;
 	std::sort(xPeaks, xPeaks + nPeaks);
         // Define fit window

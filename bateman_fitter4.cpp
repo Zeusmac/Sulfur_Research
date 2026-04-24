@@ -608,8 +608,8 @@ int main(int argc,char* argv[])
         if(cfg.use_expo_bg == 1)f_expbg -> Write();
 	f_bnd -> Write();
 	if(cfg.use_expo_bg == 1)f_bg -> Write();
+	outf -> Close();
 	TBrowser * n = new TBrowser();
 	app.Run();
-	outf -> Close();
 	return 0;
 }
