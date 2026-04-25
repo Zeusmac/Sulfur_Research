@@ -21,39 +21,75 @@ struct GammaLine {
     string isotope;
     double energy;
 };
-
+struct MatchResult {
+    string isotope;
+    double energy;
+    double deltaE;
+};
 vector<GammaLine> db;
 
 // -----------------------------
 vector<GammaLine> LoadGammaDB(const string& filename) {
+
     vector<GammaLine> out;
     ifstream in(filename);
 
-    string iso;
-    double energy;
-
-    while (in >> iso >> energy) {
-        out.push_back({iso, energy});
+    if (!in.is_open()) {
+        cerr << "ERROR: Cannot open file: " << filename << endl;
+        return out;
     }
+
+    string line;
+    while (getline(in, line)) {
+
+        if (line.empty()) continue;
+        if (line[0] == '#') continue;
+
+        string iso;
+        double energy;
+
+        stringstream ss(line);
+
+        if (!(ss >> iso >> energy)) {
+            cerr << "Skipping bad line: " << line << endl;
+            continue;
+        }
+
+        out.push_back({iso, energy});
+        cout << "Loaded: " << iso << " " << energy << endl;
+    }
+
+    cout << "DB size = " << out.size() << endl;
     return out;
 }
-
 // -----------------------------
-vector<GammaLine> MatchPeak(double x0, double sigma) {
+vector<MatchResult> MatchPeak(double peakEnergy) {
 
-    vector<GammaLine> matches;
+    vector<MatchResult> matches;
 
-    double tol = max(2.0*sigma, 2.0);
+    double tol = 3.0; // keV window
 
     for (auto &line : db) {
-        if (fabs(line.energy - x0) < tol) {
-            matches.push_back(line);
+
+        double dE = fabs(line.energy - peakEnergy);
+
+        if (dE <= tol) {
+            matches.push_back({
+                line.isotope,
+                line.energy,
+                dE
+            });
         }
     }
 
+    // sort best match first (smallest energy difference)
+    sort(matches.begin(), matches.end(),
+         [](const MatchResult &a, const MatchResult &b) {
+             return a.deltaE < b.deltaE;
+         });
+
     return matches;
 }
-
 // -----------------------------
 void FitSingleHistogram(TH1* h, TFile* fout) {
 
@@ -74,7 +110,7 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
 
     // Canvas
     TCanvas *c = new TCanvas(Form("c_%s", hname.c_str()), hname.c_str(), 1000, 700);
-    h->Draw();
+    //h->Draw();
 
     TLatex latex;
     latex.SetTextSize(0.025);
@@ -103,9 +139,9 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
 
         if (h->GetBinContent(bin) < 50) continue;
 
-        double xmin = peakX - 5;
-        double xmax = peakX + 5;
-
+	double sigma_guess = 2.1;
+	double xmin = peakX - 3*sigma_guess;
+	double xmax = peakX + 3*sigma_guess;
         // UNIQUE function name
         TF1 *f = new TF1(Form("fit_%s_%d", hname.c_str(), i),
                          "gaus(0)+pol1(3)", xmin, xmax);
@@ -117,7 +153,7 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
         f->SetParLimits(2, 0.2, 10);
         f->SetParLimits(1, xmin, xmax);
 
-        TFitResultPtr result = h->Fit(f, "R S Q");
+        TFitResultPtr result = h->Fit(f, "R S Q +");
 
         double a = f->GetParameter(0);
         double aerr = f->GetParError(0);
@@ -145,12 +181,11 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
         if (h->GetBinContent(bin) < 50) continue;
         if (sig >= 6) continue;
         if (SNR < 10.0) continue;
-
+//	f -> Draw("same");
         // -----------------------------
         // Matching
         // -----------------------------
-        auto matches = MatchPeak(x0, sig);
-
+        auto matches = MatchPeak(x0);
         // -----------------------------
         // Output text
         // -----------------------------
@@ -171,6 +206,24 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
 
         out << " Amplitude =\t " << a << " ± " << aerr << endl;
         out << " Mean   =\t" << x0 << " ± " << f->GetParError(1) << endl;
+	out << " Possible matches:\n";
+
+	if (matches.empty()) {
+    		out << "   No isotope match within tolerance\n";
+		} else {
+
+    	for (auto &m : matches) {
+
+        	out << "   Isotope: " << m.isotope
+            	<< " | Line: " << m.energy << " keV"
+            	<< " | ΔE = " << m.deltaE << " keV\n";
+    	}
+
+	    // best match (top of sorted list)
+	    out << " Best match: "
+		<< matches[0].isotope
+		<< " (" << matches[0].energy << " keV)\n";
+	}
         out << " Sigma  =\t" << sig << " ± " << sigerr << endl;
         out << " bg_slope  =\t" << f->GetParameter(3) << endl;
         out << " bg_intercept  =\t" << f->GetParameter(4) << endl;
@@ -178,7 +231,7 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
         out << " FWHM =\t" << 2.355*sig << endl;
         out << " Peak Counts =\t" << peak_count << " ± " << peak_counterr << endl;
         out << " signal/sqrt(noise) =\t" << SNR << endl;
-
+ 	
         // -----------------------------
         // Draw label
         // -----------------------------
@@ -219,7 +272,7 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
 void FitGammaAll(const char* rootfile) {
 
     db = LoadGammaDB("Isotope_energys.txt");
-
+	cout << db.size() << endl;
     TFile *file = new TFile(rootfile);
 
     if (!file || file->IsZombie()) {
@@ -244,7 +297,7 @@ void FitGammaAll(const char* rootfile) {
             FitSingleHistogram(h, fout);
         }
     }
-
+    
     fout->Close();
 
     cout << "Finished. All fits saved to AllGammaFits.root\n";

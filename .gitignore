@@ -60,3 +60,4 @@ dkms.conf
 *.root
 *.png
 *.dat
+*.agr
