@@ -507,9 +507,9 @@ void MultGausFit(TH1 *hist, double lower, double upper){
       F->SetParName(4, "intercept");
       F->SetParLimits(0, 0,2e6);
       F->SetParLimits(1, lower, upper);
-      F->SetParLimits(2, 0, 100);
-      F->SetParLimits(4, 0, 2e6);
-      F->SetParameters(719652,2786.81,1.63737,2.9846e+06,-1051.826);
+      F->SetParLimits(2, 0, 10);
+      F->SetParLimits(4, 0, 4e6);
+      F->SetParameters(103558,2786.81,1.63737,2.9846e+06,-270.236);
       //hist->GetListOfFunctions()->Add(F);
       hist->Fit(F, "SR","", lower, upper);
       hist -> Print("V");

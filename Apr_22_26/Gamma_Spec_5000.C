@@ -21,14 +21,15 @@ void Gamma_Spec_5000(const char* filename) {
         return;
     }
 
-    TFile *out = new TFile("Gamma_spec500window.root", "RECREATE");
-
-    int window = 10; //window of 100ms
+    TFile *out = new TFile("Gamma_spec100mswindow.root", "RECREATE");
+    TH1D *py = h -> ProjectionY("gamma_spec_all",1001,6001);
+    py -> Write();
+    int window = 100; //window of 100ms
     int initial_bin = 1001;
 
     TH1D *Proj[500];
 
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 50; i++) {
 
         int bin1 = initial_bin + i * window;
         int bin2 = bin1 + window;

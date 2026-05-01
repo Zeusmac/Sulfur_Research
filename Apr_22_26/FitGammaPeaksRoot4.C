@@ -27,8 +27,38 @@ struct MatchResult {
     double deltaE;
 };
 vector<GammaLine> db;
-
+map<double, vector<double>> peak_times;
+map<double, vector<double>> peak_counts;
+map<double, vector<double>> peak_errors;
 // -----------------------------
+bool IsTimeHistogram(string name) {
+    return (name.find("_") != string::npos &&
+            isdigit(name[name.find("_") + 1]));
+}
+pair<double,double> ExtractTimeRange(string name) {
+
+    double t1 = 0, t2 = 0;
+ 
+    // expects: Gamma_1001_1101 
+    sscanf(name.c_str(), "%*[^0-9]%lf_%lf", &t1, &t2);
+
+    return {t1, t2};
+}
+double FindOrCreatePeakKey(double energy, double tol = 3.0) {
+
+    for (auto &kv : peak_times) {
+        if (fabs(kv.first - energy) < tol) {
+            return kv.first;
+        }
+    }
+
+    // new peak
+    peak_times[energy]  = {};
+    peak_counts[energy] = {};
+    peak_errors[energy] = {};
+
+    return energy;
+}
 vector<GammaLine> LoadGammaDB(const string& filename) {
 
     vector<GammaLine> out;
@@ -96,10 +126,18 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
     if (!h) return;
 
     string hname = h->GetName();
-
+    
     // TEXT OUTPUT
     string txtname = "Gamma_fits/" + hname + "_fit.txt";
     ofstream out(txtname);
+	double time = 0;
+
+	if (IsTimeHistogram(hname)) {
+	    auto [t1, t2] = ExtractTimeRange(hname);
+	    time = 0.5 * (t1 + t2);
+	} else {
+	    time = -1; // special marker for full spectrum
+	}
 
     if (!out.is_open()) {
         cerr << "Cannot open output file\n";
@@ -115,9 +153,10 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
     TLatex latex;
     latex.SetTextSize(0.025);
 
-    TSpectrum s(50);
-    int nPeaks = s.Search(h, 2, "", 0.05);
-
+    TSpectrum s(1000);
+    TH1 *bkghist = s.Background(h, 12);
+    int nPeaks = s.Search(h, 2, "", 0.02);
+    h -> Add(bkghist,-1);
     double *xPeaks = s.GetPositionX();
     sort(xPeaks, xPeaks + nPeaks);
 
@@ -139,7 +178,7 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
 
         if (h->GetBinContent(bin) < 50) continue;
 
-	double sigma_guess = 2.1;
+	double sigma_guess = 2;
 	double xmin = peakX - 3*sigma_guess;
 	double xmax = peakX + 3*sigma_guess;
         // UNIQUE function name
@@ -238,7 +277,14 @@ void FitSingleHistogram(TH1* h, TFile* fout) {
         // -----------------------------
         double y = f->Eval(x0);
         latex.DrawLatex(x0, y * 1.1, label.c_str());
+	double key = FindOrCreatePeakKey(x0);
+	if (time >= 0) {
+	    peak_times[key].push_back(time);
+	    peak_counts[key].push_back(peak_count);
+	    peak_errors[key].push_back(peak_counterr);
+	}	
     }
+
 
     // -----------------------------
     // Isotope confirmation
@@ -299,7 +345,39 @@ void FitGammaAll(const char* rootfile) {
         }
     }
     
-    fout->Close();
+    fout->Close();	
+    TFile *fout2 = new TFile("all_peak_time_graphs.root", "RECREATE");
 
+	int graph_id = 0;
+
+	for (auto &kv : peak_times) {
+
+	    double energy = kv.first;
+
+	    auto &t = peak_times[energy];
+	    auto &c = peak_counts[energy];
+	    auto &e = peak_errors[energy];
+
+	    int n = t.size();
+
+	    if (n < 2) continue;  // skip useless graphs
+
+	    TGraphErrors *g = new TGraphErrors(n);
+
+	    for (int i = 0; i < n; i++) {
+		g->SetPoint(i, t[i], c[i]);
+		g->SetPointError(i, 0, e[i]);
+	    }
+
+	    g->SetName(Form("peak_%d_keV", (int)energy));
+	    g->SetTitle(Form("Peak %.1f keV;Time (ms);Counts", energy));
+	    g->SetMarkerStyle(20);
+
+	    g->Write();
+
+	    graph_id++;
+	}
+
+	fout2->Close();
     cout << "Finished. All fits saved to AllGammaFits.root\n";
 }
