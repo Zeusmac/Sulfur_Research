@@ -19,7 +19,8 @@ SRCS = GammaDB.cpp \
        PeakTracker.cpp \
        PeakFitter.cpp \
        FitGammaAnalyzer.cpp \
-       MainPeakfit.cpp
+       MainPeakfit.cpp \
+	   ResolutionAnalyzer.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

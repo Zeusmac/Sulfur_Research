@@ -14,11 +14,11 @@ void FitGammaAnalyzer::Run(const char* rootfile) {
     TFile *file = new TFile(rootfile);
     if (!file || file->IsZombie()) return;
 
-    //Root Directories
-    TDirectory *sigmaDir = file->mkdir("sigma_vs_energy");
-    TDirectory *peakDir = file->mkdir("peak_count_vs_time");
-
     TFile *fout = new TFile("AllGammaFits.root", "RECREATE");
+
+     //Root Directories
+    TDirectory *sigmaDir = fout->mkdir("sigma_vs_energy");
+    TDirectory *peakDir = fout->mkdir("peak_count_vs_time");
 
     PeakFitter fitter(db, tracker, sigmaDir, peakDir);
 

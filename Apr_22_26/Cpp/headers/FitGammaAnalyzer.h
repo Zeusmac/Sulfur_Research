@@ -4,6 +4,7 @@
 #include "GammaDB.h"
 #include "PeakTracker.h"
 #include "PeakFitter.h"
+#include "ResolutionAnalyzer.h"
 
 class FitGammaAnalyzer {
 public:

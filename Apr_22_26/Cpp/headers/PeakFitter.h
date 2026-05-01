@@ -7,8 +7,15 @@
 #include "GammaDB.h"
 #include "PeakTracker.h"
 
+
 class PeakFitter {
 public:
+    struct FitQuality {
+        double chi2ndf;
+        int status;
+        double sigma;
+        double snr;
+    };
         PeakFitter(GammaDB& db,
                PeakTracker& tracker,
                TDirectory* sigmaDir,
