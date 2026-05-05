@@ -134,7 +134,7 @@ void PeakFitter::FitHistogram(TH1* h, TFile* fout) {
 
         double content = h_work->GetBinContent(bin);
 
-        if (content < 30) continue;            // noise rejection
+        if (content < 20) continue;            // noise rejection
         if (x < 5 || x > h->GetXaxis()->GetXmax() - 5) continue;
 
         cleanPeaks.push_back(x);
@@ -168,7 +168,7 @@ void PeakFitter::FitHistogram(TH1* h, TFile* fout) {
 
     vector<double> energies, sigmas, sigma_errs;
 
-    TF1 globalBg("bg", "pol2");
+    TF1 globalBg("bg", "pol1");
 
     // -------------------------------
     // STEP 3: FIT EACH CLUSTER
@@ -177,8 +177,8 @@ void PeakFitter::FitHistogram(TH1* h, TFile* fout) {
 
         auto &cl = clusters[i];
 
-        double xmin = cl.front() - 6;
-        double xmax = cl.back() + 6;
+        double xmin = cl.front() - 5;
+        double xmax = cl.back() + 5;
 
         int n = cl.size();
 
@@ -189,7 +189,8 @@ void PeakFitter::FitHistogram(TH1* h, TFile* fout) {
 
         if (n == 1) model = "gaus(0)+pol1(3)";
         else if (n == 2) model = "gaus(0)+gaus(3)+pol1(6)";
-        else model = "gaus(0)+gaus(3)+gaus(6)+pol2(9)";
+        else if (n == 3) model = "gaus(0)+gaus(3)+gaus(6)+pol1(9)";
+        else  model = "gaus(0)+gaus(3)+gaus(6)+gaus(9)+pol1(12)";
 
         TF1 *f = new TF1(Form("fit_%s_%zu", hname.c_str(), i),
                          model.c_str(), xmin, xmax);
@@ -220,19 +221,19 @@ void PeakFitter::FitHistogram(TH1* h, TFile* fout) {
 
         double prevChi2 = 1e9;
 
-        for (int iter = 0; iter < 4; iter++) {
+        for (int iter = 0; iter < 200; iter++) {
 
             r = h_work->Fit(f, "R Q S");
 
             double chi2ndf = (r->Ndf() > 0) ? r->Chi2()/r->Ndf() : 999;
 
-            if (fabs(prevChi2 - chi2ndf) < 0.05) break;
+            if (fabs(prevChi2 - chi2ndf) < .001) break;
 
             prevChi2 = chi2ndf;
 
             // widen if bad fit
             if (chi2ndf > 5) {
-                f->SetRange(xmin - 2, xmax + 2);
+                f->SetRange(xmin - .2, xmax + .2);
             }
         }
 

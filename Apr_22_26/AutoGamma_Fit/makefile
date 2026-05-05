@@ -15,12 +15,12 @@ ROOTLIBS = $(shell root-config --libs) -lSpectrum
 # =========================
 INCLUDES = -Iheaders
 
-SRCS = GammaDB.cpp \
-       PeakTracker.cpp \
-       PeakFitter.cpp \
-       FitGammaAnalyzer.cpp \
-       MainPeakfit.cpp \
-	   ResolutionAnalyzer.cpp
+SRCS = src/GammaDB.cpp \
+       src/PeakTracker.cpp \
+       src/PeakFitter.cpp \
+       src/FitGammaAnalyzer.cpp \
+       src/MainPeakfit.cpp \
+	   src/ResolutionAnalyzer.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
